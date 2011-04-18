@@ -6,12 +6,14 @@
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
 (defsystem #:mongo-cl-driver
-    :depends-on (#:iterate #:babel #:ieee-floats #:camel-case)
+    :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets)
     :components
     ((:module "src"
               :components
               ((:file "packages")
-               (:file "bson" :depends-on ("packages"))))))
+               (:file "bson" :depends-on ("packages"))
+               (:file "wire" :depends-on ("bson"))
+               (:file "connection" :depends-on ("wire"))))))
 
 (defsystem #:mongo-cl-driver-test
   :depends-on (#:mongo-cl-driver #:lift)

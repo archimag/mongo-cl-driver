@@ -25,6 +25,15 @@
            #:encode-document
            #:decode-document
 
+           #:with-count-encoded-bytes
+           #:*encoded-bytes-count*
+           #:*decoded-bytes-count*
+
+           #:bson-target-replace
+
            #:*lisp-identifier-name-to-bson*
            #:*bson-identifier-name-to-lisp*))
 
+(defpackage #:mongo-cl-driver.wire
+  (:nicknames #:mongo.wire)
+  (:use #:iter #:mongo-cl-driver.bson #:closer-common-lisp))
