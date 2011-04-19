@@ -11,7 +11,7 @@
 
 (bt:make-thread #'(lambda ()
                     (iolib.multiplex:event-dispatch *event-base*))
-                :name "Event-Loop Thread")
+                :name "MongoDB event loop thread")
 
 (defclass connection ()
   ((hostname :initarg :hostname :initform "localhost" :reader connection-hostname)
@@ -64,6 +64,7 @@
                                            :write #'send-brigade)
            (iter (while (not done-p))
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t)))))
+      
       (values))))
                       
 
@@ -83,7 +84,8 @@
                (declare (ignore event errorp))
                (multiple-value-bind (buffer count)
                    (iolib.sockets:receive-from socket
-                                               :buffer (aref (brigade-buckets brigade) 0)
+                                               :buffer (aref (brigade-buckets brigade)
+                                                             (slot-value brigade 'bucket-index))
                                                :start (slot-value brigade 'pos-in-bucket))
                  (declare (ignore buffer))
                  (incf (slot-value brigade 'pos-in-bucket) count)
@@ -97,7 +99,12 @@
                                                               :element-type '(unsigned-byte 8))
                                                   (aref (brigade-buckets brigade) 0))))))
 
-                 (when (and size (= size (slot-value brigade 'pos-in-bucket)))
+                 (when (= (slot-value brigade 'pos-in-bucket) +bucket-size+)
+                   (brigade-extend brigade))
+
+                 (when (and size
+                            (= size (+ (* (1- (length (brigade-buckets brigade))) +bucket-size+)
+                                       (slot-value brigade 'pos-in-bucket))))
                    (iolib.multiplex:remove-fd-handlers *event-base*
                                                        fd
                                                        :read t)
@@ -122,18 +129,18 @@
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t))
            (decode-brigade)))))))
 
-(defparameter *connection* (make-instance 'connection))
+;; (defparameter *connection* (make-instance 'connection))
 
-(defun test (&optional callback)
-  (labels ((getreply ()
-               (read-reply *connection* callback))
-           (sendmsg ()
-             (send-message *connection*
-                           (make-instance 'op-query 
-                                          :full-collection-name "test.things"
-                                          :return-field-selector nil)
-                           (if callback #'getreply))
-             (unless callback
-               (getreply))))
-    (sendmsg)))
+;; (defun test (&optional callback)
+;;   (labels ((getreply ()
+;;              (read-reply *connection* callback))
+;;            (sendmsg ()
+;;              (send-message *connection*
+;;                            (make-instance 'op-query 
+;;                                           :full-collection-name "test.things"
+;;                                           :return-field-selector nil)
+;;                            (if callback #'getreply))
+;;              (unless callback
+;;                (getreply))))
+;;     (sendmsg)))
     

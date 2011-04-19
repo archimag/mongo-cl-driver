@@ -40,5 +40,25 @@
   (:export #:brigade
            #:brigade-extend
            #:brigade-free-buckets
-           #:brigade-ref))
+           #:brigade-ref
+
+           #:connection
+           #:send-message
+           #:read-reply
+
+           #:op-update
+           #:op-insert
+           #:op-query
+           #:op-getmore
+           #:op-delete
+
+           #:op-reply
+           #:op-reply-response-flags
+           #:op-reply-cursor-id
+           #:op-reply-starting-from
+           #:op-reply-number-returned
+           #:op-reply-documents))
            
+(defpackage #:mongo-cl-driver
+  (:nicknames #:mongo)
+  (:use #:cl #:iter #:mongo-cl-driver.wire))
