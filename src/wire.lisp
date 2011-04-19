@@ -215,7 +215,7 @@
    :bson-type :int32)
   (cursor-id
    :reader op-reply-cursor-id
-   :bson-type :object-id)
+   :bson-type :int64)
   (starting-from
    :reader op-reply-starting-from
    :bson-type :int32)
@@ -276,10 +276,9 @@
          (*decoded-bytes-count* 0))
     (iter (for slot in (butlast (class-slots reply-class)))
           (setf (slot-value-using-class reply-class reply slot)
-                (print (funcall (message-effective-slot-decoder slot)
-                                source))))
-    (let ((*decoded-bytes-count* (- *decoded-bytes-count* 4)))
-;;    (iter (for i from 0 below (op-reply-number-returned reply))
+                (funcall (message-effective-slot-decoder slot)
+                         source)))
+    (iter (for i from 0 below (op-reply-number-returned reply))
           (push (decode-document source)
                 (slot-value reply 'documents)))
     reply))

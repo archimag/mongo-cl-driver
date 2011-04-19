@@ -6,7 +6,8 @@
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
 (defsystem #:mongo-cl-driver
-    :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets)
+    :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets
+                 #:bordeaux-threads)
     :components
     ((:module "src"
               :components
