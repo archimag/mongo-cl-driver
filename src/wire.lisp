@@ -96,19 +96,17 @@
   (:slot-order message-length request-id response-to opcode)
   (:metaclass message-class))
 
-(defvar *code-class-map* (make-hash-table))
-
 (defmacro define-protocol-message (name code &rest slots)
-  `(progn
-     (setf (gethash ,code *code-class-map* ) ',name)
-     (defclass ,name (msg-header)
-       ,slots
-       (:default-initargs :opcode ,code)
-       (:slot-order message-length request-id response-to opcode ,@(mapcar #'car slots))
-       (:metaclass message-class))))
+  `(defclass ,name (msg-header)
+     ,slots
+     (:default-initargs :opcode ,code)
+     (:slot-order message-length request-id response-to opcode ,@(mapcar #'car slots))
+     (:metaclass message-class)))
 
 (define-protocol-message op-update +op-update+
-  (zero :initform 0 :bson-type :int32)
+  (zero
+   :initform 0
+   :bson-type :int32)
   (full-collection-name
    :initarg :full-collection-name
    :initform ""

@@ -7,6 +7,12 @@
 
 (in-package #:mongo-cl-driver.wire)
 
+(defparameter *event-base* (make-instance 'iolib.multiplex:event-base))
+
+(bt:make-thread #'(lambda ()
+                    (iolib.multiplex:event-dispatch *event-base*))
+                :name "Event-Loop Thread")
+
 (defclass connection ()
   ((hostname :initarg :hostname :initform "localhost" :reader connection-hostname)
    (port :initarg :port :initform 27017 :reader connection-port)
@@ -22,160 +28,110 @@
     (setf (slot-value conn 'socket)
           socket)))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; foreign bucket
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defvar *bucket-pool* nil)
-
-(defconstant +bucket-size+ 4096)
-
-(defun get-bucket ()
-  (or (pop *bucket-pool*)
-      (make-array +bucket-size+ :element-type '(unsigned-byte 8))))
-
-(defun free-bucket (bucket)
-  (push bucket *bucket-pool*))
-
-(defclass bucket-target ()
-  ((buckets :initform (make-array 0 :fill-pointer 0 :adjustable t))
-   (bucket-index :initform -1)
-   (pos-in-bucket :initform 0)))
-  
-(defmethod shared-initialize :after ((obj bucket-target) slot-names &key)
-  (bucket-target-extend obj))
-
-(defun bucket-target-extend (obj)
-  (vector-push-extend (get-bucket)
-                      (slot-value obj 'buckets))
-  (incf (slot-value obj 'bucket-index))
-  (setf (slot-value obj 'pos-in-bucket) 0))
-
-(defun bucket-target-clear (obj)
-  (iter (for bucket in-vector (slot-value obj 'buckets))
-        (free-bucket bucket)))
-
-(defun bucket-target-prepare-for-decode (obj)
-  (setf (slot-value obj 'bucket-index) 0
-        (slot-value obj 'pos-in-bucket) 0))
-
-(defmacro with-bucket-target (name &body body)
-  `(let ((,name (make-instance 'bucket-target)))
-     (unwind-protect
-          (progn ,@body)
-       (bucket-target-clear ,name))))
-
-(defmacro btref (obj)
-  `(aref (aref (slot-value ,obj 'buckets)
-               (slot-value ,obj 'bucket-index))
-         (slot-value ,obj 'pos-in-bucket)))
-
-(defmethod decode-byte ((source bucket-target))
-  (prog1
-      (btref source)
-    (incf (slot-value source 'pos-in-bucket))
-    (when (= (slot-value source 'pos-in-bucket) +bucket-size+)
-      (incf (slot-value source 'bucket-index))
-      (setf (slot-value source 'pos-in-bucket) 0))))
-
-(defmethod encode-byte (byte (target bucket-target))
-  (setf (btref target)
-        byte)
-  (incf (slot-value target 'pos-in-bucket))
-  (when (= (slot-value target 'pos-in-bucket) +bucket-size+)
-    (bucket-target-extend target)))
-
-(defmethod bson-target-replace ((target bucket-target) sequence start)
-  (iter (for i from start)
-        (for j from 0 below (length sequence))
-        (multiple-value-bind (index pos) (floor i +bucket-size+)
-          (setf (aref (aref (slot-value target 'buckets)
-                            index)
-                      pos)
-                (elt sequence j)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun send-msg (conn msg &aux (socket (connection-socket conn)))
-  (with-bucket-target target
-    (encode-protocol-message msg target)
-    (iter (for i from 0 below (1- (slot-value target 'bucket-index)))
-          (iolib.sockets:send-to socket
-                                 (aref (slot-value target 'buckets)
-                                       i)))
-    (iolib.sockets:send-to socket
-                           (aref (slot-value target 'buckets)
-                                 (slot-value target 'bucket-index))
-                           :start 0
-                           :end (slot-value target 'pos-in-bucket))))
-
-(defparameter *event-base* (make-instance 'iolib.multiplex:event-base))
-
-(bt:make-thread #'(lambda ()
-                    (iolib.multiplex:event-dispatch *event-base*))
-                :name "Event-Loop Thread")
+(defun send-message (conn msg &optional callback)
+  (let ((socket (connection-socket conn))
+        (brigade (make-instance 'brigade))
+        (bytes-sent 0)
+        (done-p nil))
+    (flet ((send-brigade (fd event errorp)
+             (declare (ignore event errorp))
+             (incf bytes-sent
+                   (iolib.sockets:send-to socket
+                                          (aref (brigade-buckets brigade)
+                                                (slot-value brigade 'bucket-index))
+                                          :start bytes-sent
+                                          :end (slot-value brigade 'pos-in-bucket)))
+             (when (= bytes-sent (slot-value brigade 'pos-in-bucket))
+               (iolib.multiplex:remove-fd-handlers *event-base*
+                                                   fd
+                                                   :write t)
+               (setf done-p t)
+               (brigade-free-buckets brigade)
+               (when callback (funcall callback)))))
+      (encode-protocol-message msg brigade)
+      (cond
+        (callback
+         (iolib.multiplex:set-io-handler *event-base*
+                                        (iolib.sockets:socket-os-fd socket)
+                                        :write #'send-brigade))
+        (t
+         (iolib.multiplex:with-event-base (*event-base*)
+           (iolib.multiplex:set-io-handler *event-base*
+                                           (iolib.sockets:socket-os-fd socket)
+                                           :write #'send-brigade)
+           (iter (while (not done-p))
+                 (iolib.multiplex:event-dispatch *event-base* :one-shot t)))))
+      (values))))
+                      
 
 (defun read-reply (conn &optional callback &aux (socket (connection-socket conn)))
   (declare (optimize (debug 3)))
-  (let ((tbucket (make-instance 'bucket-target))
+  (let ((brigade (make-instance 'brigade))
         (size nil)
         (done-p nil))
-    (labels ((decode-bucket ()
-               (setf (slot-value tbucket 'bucket-index) 0
-                     (slot-value tbucket 'pos-in-bucket) 0)
+    (labels ((decode-brigade ()
+               (setf (slot-value brigade 'bucket-index) 0
+                     (slot-value brigade 'pos-in-bucket) 0)
                (unwind-protect
-                    (decode-op-reply tbucket)
-                 (bucket-target-clear tbucket)))
+                    (decode-op-reply brigade)
+                 (brigade-free-buckets brigade)))
              
-             (read-bucket (fd event errorp)
+             (read-brigade (fd event errorp)
                (declare (ignore event errorp))
                (multiple-value-bind (buffer count)
                    (iolib.sockets:receive-from socket
-                                               :buffer (aref (slot-value tbucket 'buckets) 0)
-                                               :start (slot-value tbucket 'pos-in-bucket))
+                                               :buffer (aref (brigade-buckets brigade) 0)
+                                               :start (slot-value brigade 'pos-in-bucket))
                  (declare (ignore buffer))
-                 (incf (slot-value tbucket 'pos-in-bucket) count)
+                 (incf (slot-value brigade 'pos-in-bucket) count)
 
                  (when (and (not size)
-                            (> (slot-value tbucket 'pos-in-bucket)
+                            (> (slot-value brigade 'pos-in-bucket)
                                4))
                    (let ((*decoded-bytes-count* 0))
                      (setf size
                            (decode-int32 (replace (make-array 4
                                                               :element-type '(unsigned-byte 8))
-                                                  (aref (slot-value tbucket 'buckets) 0))))))
+                                                  (aref (brigade-buckets brigade) 0))))))
 
-                 (when (and size (= size (slot-value tbucket 'pos-in-bucket)))
-                   (setf done-p t)
+                 (when (and size (= size (slot-value brigade 'pos-in-bucket)))
                    (iolib.multiplex:remove-fd-handlers *event-base*
                                                        fd
                                                        :read t)
+                   (setf done-p t)
                    (when callback
-                     (funcall callback (decode-bucket)))))))
-      (iolib.multiplex:with-event-base (*event-base*)
-        (iolib.multiplex:set-io-handler *event-base*
+                     (funcall callback
+                              (unwind-protect
+                                   (decode-brigade)
+                                (brigade-free-buckets brigade))))))))
+      (cond
+        (callback
+         (iolib.multiplex:set-io-handler *event-base*
                                         (iolib.sockets:socket-os-fd socket)
-                                        :read #'read-bucket)
-        (unless callback
-          (iter (while (not done-p))
-                (iolib.multiplex:event-dispatch *event-base* :one-shot t))
-          (decode-bucket))))))
+                                        :read #'read-brigade)
+         (values))
+        (t
+         (iolib.multiplex:with-event-base (*event-base*)
+           (iolib.multiplex:set-io-handler *event-base*
+                                           (iolib.sockets:socket-os-fd socket)
+                                           :read #'read-brigade)
+           (iter (while (not done-p))
+                 (iolib.multiplex:event-dispatch *event-base* :one-shot t))
+           (decode-brigade)))))))
 
-(defun test ()
-  (let ((conn (make-instance 'connection)))
-    (unwind-protect
-         (progn
-           (send-msg conn
-                     (make-instance 'op-query 
-                                    :full-collection-name "test.thing"
-                                    :return-field-selector nil))
-           (finish-output (connection-socket conn))
-           (read-reply conn
-;;                       #'print
-                       ))
-      (close (connection-socket conn)))))
+(defparameter *connection* (make-instance 'connection))
 
-
+(defun test (&optional callback)
+  (labels ((getreply ()
+               (read-reply *connection* callback))
+           (sendmsg ()
+             (send-message *connection*
+                           (make-instance 'op-query 
+                                          :full-collection-name "test.things"
+                                          :return-field-selector nil)
+                           (if callback #'getreply))
+             (unless callback
+               (getreply))))
+    (sendmsg)))
     

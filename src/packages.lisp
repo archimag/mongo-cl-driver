@@ -36,4 +36,9 @@
 
 (defpackage #:mongo-cl-driver.wire
   (:nicknames #:mongo.wire)
-  (:use #:iter #:mongo-cl-driver.bson #:closer-common-lisp))
+  (:use #:iter #:mongo-cl-driver.bson #:closer-common-lisp)
+  (:export #:brigade
+           #:brigade-extend
+           #:brigade-free-buckets
+           #:brigade-ref))
+           
