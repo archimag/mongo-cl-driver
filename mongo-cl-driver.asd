@@ -12,10 +12,16 @@
     ((:module "src"
               :components
               ((:file "packages")
-               (:file "bson" :depends-on ("packages"))
-               (:file "wire" :depends-on ("bson"))
-               (:file "bucket-brigade" :depends-on ("bson"))
-               (:file "connection" :depends-on ("wire" "bucket-brigade"))))))
+               (:module "bson"
+                        :components
+                        ((:file "bson"))
+                        :depends-on ("packages"))
+               (:module "wire"
+                        :components
+                        ((:file "wire")
+                         (:file "bucket-brigade")
+                         (:file "connection" :depends-on ("wire" "bucket-brigade")))
+                        :depends-on ("bson"))))))
 
 (defsystem #:mongo-cl-driver-test
   :depends-on (#:mongo-cl-driver #:lift)

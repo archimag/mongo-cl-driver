@@ -34,6 +34,9 @@
         (brigade (make-instance 'brigade))
         (bytes-sent 0)
         (done-p nil))
+    
+    (encode-protocol-message msg brigade)
+    
     (flet ((send-brigade (fd event errorp)
              (declare (ignore event errorp))
              (incf bytes-sent
@@ -48,8 +51,7 @@
                                                    :write t)
                (setf done-p t)
                (brigade-free-buckets brigade)
-               (when callback (funcall callback)))))
-      (encode-protocol-message msg brigade)
+               (when callback (funcall callback)))))      
       (cond
         (callback
          (iolib.multiplex:set-io-handler *event-base*
