@@ -28,6 +28,10 @@
 (defmethod shared-initialize :after ((obj brigade) slot-names &key)
   (brigade-extend obj))
 
+(defun brigade-total-size (brigade)
+  (+ (* (1- (length (brigade-buckets brigade))) +bucket-size+)
+     (slot-value brigade  'pos-in-bucket)))
+
 (defun brigade-extend (brigade)
   (vector-push-extend (alloc-bucket)
                       (brigade-buckets brigade))

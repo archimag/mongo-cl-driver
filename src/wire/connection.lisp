@@ -33,25 +33,29 @@
   (let ((socket (connection-socket conn))
         (brigade (make-instance 'brigade))
         (bytes-sent 0)
-        (done-p nil))
+        (done-p nil)
+        (total-size 0))
     
     (encode-protocol-message msg brigade)
+    (setf total-size
+          (brigade-total-size brigade))
     
     (flet ((send-brigade (fd event errorp)
              (declare (ignore event errorp))
-             (incf bytes-sent
-                   (iolib.sockets:send-to socket
-                                          (aref (brigade-buckets brigade)
-                                                (slot-value brigade 'bucket-index))
-                                          :start bytes-sent
-                                          :end (slot-value brigade 'pos-in-bucket)))
-             (when (= bytes-sent (slot-value brigade 'pos-in-bucket))
-               (iolib.multiplex:remove-fd-handlers *event-base*
-                                                   fd
-                                                   :write t)
+             
+             (multiple-value-bind (index pos) (floor bytes-sent +bucket-size+)
+               (incf bytes-sent
+                     (iolib.sockets:send-to socket
+                                            (aref (brigade-buckets brigade) index)
+                                            :start pos
+                                            :end (if (= index (slot-value brigade 'bucket-index))
+                                                     (slot-value brigade 'pos-in-bucket)))))
+               
+             (when (= bytes-sent total-size)
+               (iolib.multiplex:remove-fd-handlers *event-base* fd :write t)
                (setf done-p t)
                (brigade-free-buckets brigade)
-               (when callback (funcall callback)))))      
+               (when callback (funcall callback)))))
       (cond
         (callback
          (iolib.multiplex:set-io-handler *event-base*
