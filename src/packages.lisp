@@ -5,7 +5,6 @@
 ;;;;
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
-
 (defpackage #:mongo-cl-driver.bson
   (:nicknames #:mongo.bson)
   (:use #:cl #:iter)
@@ -32,7 +31,12 @@
            #:bson-target-replace
 
            #:*lisp-identifier-name-to-bson*
-           #:*bson-identifier-name-to-lisp*))
+           #:*bson-identifier-name-to-lisp*
+
+           #:*convert-bson-document-to-lisp*
+           #:decode-document-to-alist
+           #:decode-document-to-plist
+           #:decode-document-to-hashtable))
 
 (defpackage #:mongo-cl-driver.wire
   (:nicknames #:mongo.wire)
@@ -61,4 +65,29 @@
            
 (defpackage #:mongo-cl-driver
   (:nicknames #:mongo)
-  (:use #:cl #:iter #:mongo-cl-driver.wire))
+  (:use #:cl
+        #:iter #:alexandria
+        #:mongo-cl-driver.wire)
+  (:export #:connection
+
+           #:database
+           #:run-command
+           #:last-error
+           #:db-stats
+
+           #:collection
+           #:collection-names
+           #:create-collection
+           #:drop-collection
+           #:validate-collection
+
+           #:find-one))
+
+(defpackage #:mongo-cl-driver.son-syntax-sugar
+  (:nicknames #:son-syntax-sugar)
+  (:use #:cl #:iter)
+  (:export #:@ #:%ht))
+  
+(defpackage #:mongo-cl-driver-user
+  (:nicknames #:mongo-user)
+  (:use #:cl #:mongo-cl-driver #:mongo-cl-driver.son-syntax-sugar))
