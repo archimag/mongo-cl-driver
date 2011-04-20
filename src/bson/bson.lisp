@@ -270,7 +270,6 @@
                           ,@body)))
                  (t (iter (for (,key . ,value) in ,doc)
                           ,@body))))))))
-               
 
 (defun encode-document (obj target
                         &aux (index *encoded-bytes-count*))
@@ -286,16 +285,34 @@
      (encode-int32 count arr)
      (bson-target-replace target arr index)))
 
+(defun decode-document-to-alist (source end)
+  (iter (while (< *decoded-bytes-count* end))
+        (collect (decode-element source))))
+
+(defun decode-document-to-plist (source end)
+  (iter (while (< *decoded-bytes-count* end))
+        (for (key . value) = (decode-element source))
+        (collect key)
+        (collect value)))
+
+(defun decode-document-to-hashtable (source end)
+  (iter (with hash = (make-hash-table :test 'equal))
+        (while (< *decoded-bytes-count* end))
+        (for (key . value) = (decode-element source))
+        (setf (gethash key hash) value)
+        (finally (return hash))))
+
+(defparameter *convert-bson-document-to-lisp* #'decode-document-to-alist)
+
 (defun decode-document (source)
   "Decode BSON document from SOURCE"
   (let* ((end (+ *decoded-bytes-count*
                  (decode-int32 source)
                  -1)))
-    (prog1 
-        (iter (while (< *decoded-bytes-count* end))
-              (let ((key-value (decode-element source)))
-                (collect (car key-value))
-                (collect (cdr key-value))))
+    (prog1
+        (funcall *convert-bson-document-to-lisp*
+                 source
+                 end)      
       (unless (= end *decoded-bytes-count*)
         (error "Bad format"))
       (decode-byte source))))
