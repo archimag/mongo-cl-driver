@@ -12,6 +12,9 @@
    (name :initarg :name :reader collection-name)
    (fullname :reader collection-fullname)))
 
+(defmethod connection ((collection collection))
+  (connection (collection-database collection)))
+
 (defmethod shared-initialize :after ((collection collection) slot-names &key create options &allow-other-keys)
   (let ((name (collection-name collection))
         (db   (collection-database collection)))
@@ -48,11 +51,31 @@
     (princ (collection-fullname col) stream)))
 
 (defun find-one (collection &optional query)
-  (let ((conn (database-connection (collection-database collection))))
+  (let ((conn (connection collection)))
     (send-message conn
                   (make-instance 'op-query
                                  :number-to-return 1
                                  :full-collection-name (collection-fullname collection)
                                  :return-field-selector query))
     (first (op-reply-documents (read-reply conn)))))
+
+(defun find-cursor (collection &optional query)
+  (let ((conn (connection collection)))
+    (send-message conn
+                  (make-instance 'op-query
+                                 :full-collection-name (collection-fullname collection)
+                                 :return-field-selector query))
+    (let ((reply (read-reply conn)))
+      (make-instance 'cursor
+                     :id (op-reply-cursor-id reply)
+                     :collection collection
+                     :documents (op-reply-documents reply)))))
+
+(defun insert (collection &rest objects)
+  (when objects
+    (send-message (connection collection)
+                  (make-instance 'op-insert
+                                 :full-collection-name (collection-fullname collection)
+                                 :documents objects))))
+     
   

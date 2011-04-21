@@ -11,13 +11,19 @@
   `(let ((mongo-cl-driver.bson:*convert-bson-document-to-lisp* #'mongo-cl-driver.bson:decode-document-to-alist))
      ,@body))
 
+(defgeneric connection (obj)
+  (:documentation "Get connection associated with OBJ"))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; database
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defclass database ()
-  ((connection :initarg :connection :reader database-connection)
+  ((connection :initarg :connection)
    (name :initarg :name :reader database-name)))
+
+(defmethod connection ((db database))
+  (slot-value db 'connection))
 
 (defmethod print-object ((db database) stream)
   (print-unreadable-object (db stream :type t :identity t)
@@ -26,7 +32,7 @@
 (defun run-command (db cmd)
   (if (stringp cmd)
       (run-command db `((,cmd . 1)))
-      (let ((conn (database-connection db)))
+      (let ((conn (connection db)))
         (send-message conn
                       (make-instance 'op-query
                                      :number-to-return 1
@@ -35,21 +41,24 @@
         (first (op-reply-documents (read-reply conn))))))
 
 (defun db-stats (db)
-  (run-command db '(("dbStats" . 1))))
+  (run-command db "dbStats"))
 
 (defun last-error (db)
-  (run-command db '(("getLastError" . 1))))
+  (run-command db "getLastError"))
+
+(defun cursor-info (db)
+  (run-command db "cursorInfo"))
 
 (defun collection-names (database)
   "Get a list of all the collection in this DATABASE"
-  (let ((conn (database-connection database)))
+  (let ((conn (connection database))
+        (prefix (format nil "~A." (database-name database))))
     (send-message conn
                   (make-instance 'op-query
                                  :full-collection-name (format nil "~A.system.namespaces" (database-name database))
                                  :return-field-selector nil))
-    (iter (for item in (with-alist-converter (op-reply-documents (read-reply conn))))
-          (let* ((prefix (format nil "~A." (database-name database)))
-                 (fullname (cdr (assoc :name item)))
+    (iter (for item in (op-reply-documents (read-reply conn)))
+          (let* ((fullname (gethash "name" item))
                  (name (second (multiple-value-list (starts-with-subseq prefix
                                                                         fullname
                                                                         :return-suffix t)))))
@@ -100,10 +109,8 @@ Options:
 Returns a string of validation info. An error of type collection-invalid signaled
 if validation fails."
   (let* ((name (%collection-name collection))
-         (result (with-alist-converter
-                   (run-command database
-                                `(("validate" . ,name)))))
-         (info (cdr (assoc :result result))))
+         (result (run-command database `(("validate" . ,name))))
+         (info (gethash "result" result)))
     (when (or (search "exception" info)
               (search "corrupt" info))
       (error "~A invalid: ~A" name info))

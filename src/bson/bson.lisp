@@ -22,9 +22,9 @@
     (replace (slot-value id 'raw) raw)))
 
 (defmethod print-object ((id object-id) stream)
-  (print-unreadable-object (id stream :type t :identity t)
+  (print-unreadable-object (id stream :type t :identity nil)
     (iter (for ch in-vector (slot-value id 'raw))
-          (format stream "\\x~2,'0X" ch))))
+          (format stream "~2,'0X" ch))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; BSON target minimal interface
@@ -163,7 +163,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defparameter *lisp-identifier-name-to-bson* #'camel-case:lisp-to-camel-case)
-(defparameter *bson-identifier-name-to-lisp* #'camel-case:camel-case-to-lisp)
+;;(defparameter *bson-identifier-name-to-lisp* #'camel-case:camel-case-to-lisp)
+(defparameter *bson-identifier-name-to-lisp* nil)
 
 (defun encode-ename (name target)
   (typecase name
@@ -302,7 +303,7 @@
         (setf (gethash key hash) value)
         (finally (return hash))))
 
-(defparameter *convert-bson-document-to-lisp* #'decode-document-to-alist)
+(defparameter *convert-bson-document-to-lisp* #'decode-document-to-hashtable)
 
 (defun decode-document (source)
   "Decode BSON document from SOURCE"

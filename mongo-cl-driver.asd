@@ -23,7 +23,9 @@
                          (:file "connection" :depends-on ("wire" "bucket-brigade")))
                         :depends-on ("bson"))
                (:file "database" :depends-on ("wire"))
-               (:file "collection" :depends-on ("wire"))))))
+               (:file "collection" :depends-on ("wire"))
+               (:file "cursor" :depends-on ("wire"))
+               (:file "son-sugar" :depends-on ("packages"))))))
 
 (defsystem #:mongo-cl-driver-test
   :depends-on (#:mongo-cl-driver #:lift)

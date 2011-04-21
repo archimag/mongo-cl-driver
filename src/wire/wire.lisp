@@ -151,7 +151,7 @@
    :bson-type :int32)
   (number-to-return
    :initarg :number-to-return
-   :initform 100
+   :initform 20
    :bson-type :int32)
   (return-field-selector
    :initarg :return-field-selector
@@ -169,11 +169,10 @@
    :bson-type :cstring)
   (number-to-return
    :initarg :number-to-return
-   :initform 100
    :bson-type :int32)
   (cursor-id
    :initarg :cursor-id
-   :bson-type :object-id))
+   :bson-type :int64))
 
 (define-protocol-message op-delete +op-delete+
   (zero
@@ -198,9 +197,9 @@
   (number-of-cursor-ids
    :bson-type :int32)
   (cursor-ids
-   :initform :cursor-ids
-   :initarg nil
-   :bson-type :object-id
+   :initform nil
+   :initarg :cursor-ids
+   :bson-type :int64
    :mode :maybe-few))
 
 (defmethod shared-initialize :after ((msg op-kill-cursors) slot-names &key &allow-other-keys)
@@ -254,11 +253,17 @@
                 (dotimes (i 4)
                   (encode-byte 0 target))
                 (iter (for slot in (cdr (class-slots (class-of message))))
-                      (funcall (message-effective-slot-encoder slot)
-                               (slot-value-using-class (class-of message)
-                                                                  message
-                                                                  slot)
-                               target))))
+                      (for mode = (message-effective-slot-repetition-mode slot))
+                      (for value = (slot-value-using-class (class-of message)
+                                                           message
+                                                           slot))
+                      (for encoder = (message-effective-slot-encoder slot))
+                      (case mode
+                        ((:single :optional)
+                         (funcall encoder value target))
+                        (:maybe-few
+                         (iter (for item in value)
+                               (funcall encoder item target)))))))
         (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0)))
     (encode-int32 size arr)
     (bson-target-replace target arr 0)

@@ -55,6 +55,7 @@
            #:op-query
            #:op-getmore
            #:op-delete
+           #:op-kill-cursors
 
            #:op-reply
            #:op-reply-response-flags
@@ -68,12 +69,16 @@
   (:use #:cl
         #:iter #:alexandria
         #:mongo-cl-driver.wire)
+  (:import-from #:mongo-cl-driver.bson #:object-id)
   (:export #:connection
+
+           #:object-id
 
            #:database
            #:run-command
            #:last-error
            #:db-stats
+           #:cursor-info
 
            #:collection
            #:collection-names
@@ -81,13 +86,23 @@
            #:drop-collection
            #:validate-collection
 
-           #:find-one))
+           #:find-one
+           #:find-cursor
+           #:insert
 
-(defpackage #:mongo-cl-driver.son-syntax-sugar
-  (:nicknames #:son-syntax-sugar)
+           #:cursor
+           #:with-cursor
+           #:docursor
+           #:close-cursor))
+
+(defpackage #:mongo-cl-driver.son-sugar
+  (:nicknames #:son-sugar)
   (:use #:cl #:iter)
-  (:export #:@ #:%ht))
+  (:export #:son
+           #:with-son-printer
+           #:print-son))
   
 (defpackage #:mongo-cl-driver-user
   (:nicknames #:mongo-user)
-  (:use #:cl #:mongo-cl-driver #:mongo-cl-driver.son-syntax-sugar))
+  (:use #:cl #:iter
+        #:mongo-cl-driver #:mongo-cl-driver.son-sugar))
