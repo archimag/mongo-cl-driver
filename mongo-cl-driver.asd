@@ -18,9 +18,9 @@
                         :depends-on ("packages"))
                (:module "wire"
                         :components
-                        ((:file "wire")
+                        ((:file "protocol")
                          (:file "bucket-brigade")
-                         (:file "connection" :depends-on ("wire" "bucket-brigade")))
+                         (:file "connection" :depends-on ("protocol" "bucket-brigade")))
                         :depends-on ("bson"))
                (:file "database" :depends-on ("wire"))
                (:file "collection" :depends-on ("wire"))
