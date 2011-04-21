@@ -155,18 +155,14 @@
     (send-message socket message)
     (read-reply socket)))
 
-;; (defparameter *connection* (make-instance 'connection))
+(defun send-and-read-async (connection message callback)
+  (let ((socket (connection-socket connection)))
+    (flet ((read-and-call ()
+             (read-reply socket
+                         :async t
+                         :callback callback)))
+    (send-message socket
+                  message
+                  :async t
+                  :callback #'read-and-call))))
 
-;; (defun test (&optional callback)
-;;   (labels ((getreply ()
-;;              (read-reply *connection* callback))
-;;            (sendmsg ()
-;;              (send-message *connection*
-;;                            (make-instance 'op-query 
-;;                                           :full-collection-name "test.things"
-;;                                           :return-field-selector nil)
-;;                            (if callback #'getreply))
-;;              (unless callback
-;;                (getreply))))
-;;     (sendmsg)))
-    

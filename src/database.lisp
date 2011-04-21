@@ -38,14 +38,13 @@
 (defun run-command (db cmd)
   (if (stringp cmd)
       (run-command db `((,cmd . 1)))
-      (let ((conn (connection db)))
-        (send-message-sync conn
-                           (make-instance 'op-query
-                                          :number-to-return 1
-                                          :full-collection-name (format nil "~A.$cmd" (database-name db))
-                                          :return-field-selector cmd))
-        (first (op-reply-documents (read-reply-sync conn))))))
-
+      (first (op-reply-documents
+              (send-and-read-sync (connection db)
+                                  (make-instance 'op-query
+                                                 :number-to-return 1
+                                                 :full-collection-name (format nil "~A.$cmd" (database-name db))
+                                                 :return-field-selector cmd))))))
+             
 (defun db-stats (db)
   (run-command db "dbStats"))
 
@@ -57,13 +56,12 @@
 
 (defun collection-names (database)
   "Get a list of all the collection in this DATABASE"
-  (let ((conn (connection database))
-        (prefix (format nil "~A." (database-name database))))
-    (send-message-sync conn
-                       (make-instance 'op-query
-                                      :full-collection-name (format nil "~A.system.namespaces" (database-name database))
-                                      :return-field-selector nil))
-    (iter (for item in (op-reply-documents (read-reply-sync conn)))
+  (let ((prefix (format nil "~A." (database-name database)))
+        (reply (send-and-read-sync (connection database)
+                                   (make-instance 'op-query
+                                                  :full-collection-name (format nil "~A.system.namespaces" (database-name database))
+                                                  :return-field-selector nil))))
+    (iter (for item in (op-reply-documents reply))
           (let* ((fullname (gethash "name" item))
                  (name (second (multiple-value-list (starts-with-subseq prefix
                                                                         fullname

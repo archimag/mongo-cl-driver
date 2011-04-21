@@ -38,21 +38,24 @@
   (values))
 
 (defun refresh-cursor (cursor)
-  (let ((conn (connection cursor)))
-    (send-message-sync conn
-                       (make-instance 'op-getmore
-                                      :cursor-id (cursor-id cursor)
-                                      :full-collection-name (fullname (cursor-collection cursor))
-                                      :number-to-return 20))
-    (let ((reply (read-reply-sync conn)))
-      (setf (slot-value cursor 'documents)
-            (op-reply-documents reply)))))
+  (setf (slot-value cursor 'documents)
+        (op-reply-documents
+         (send-and-read-sync (connection cursor)
+                             (make-instance 'op-getmore
+                                            :cursor-id (cursor-id cursor)
+                                            :full-collection-name (fullname (cursor-collection cursor))
+                                            :number-to-return 20)))))
 
 (defmacro with-cursor ((name collection &optional query) &body body)
   `(let ((,name (find-cursor ,collection ,query)))
      (unwind-protect
           (progn ,@body)
        (close-cursor ,name))))
+
+(defmacro with-cursor-async ((name collection &optional query) &body body)
+  `(find-cursor-async ,collection
+                      ,query
+                      (lambda (,name) ,@body)))
 
 (defmacro docursor ((var cursor) &body body)
   (let ((cur (gensym)))

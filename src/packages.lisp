@@ -50,8 +50,7 @@
            #:send-message-sync
            #:send-message-async
            #:send-and-read-sync
-           #:read-reply-sync
-           #:read-reply-async
+           #:send-and-read-async
 
            #:op-update
            #:op-insert
@@ -90,13 +89,15 @@
            #:validate-collection
 
            #:find-one
-           #:find-cursor
+           #:find-one-async
+           #:find-cursor-async
            #:insert-op
            #:update-op
            #:delete-op
 
            #:cursor
            #:with-cursor
+           #:with-cursor-async
            #:docursor
            #:close-cursor))
 
