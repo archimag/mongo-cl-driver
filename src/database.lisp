@@ -19,8 +19,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defclass database ()
-  ((connection :initarg :connection)
+  ((connection :initform nil)
    (name :initarg :name :reader database-name)))
+
+(defmethod shared-initialize :after ((db database) slot-names &key hostname port &allow-other-keys)
+  (setf (slot-value db 'connection)
+        (make-instance 'connection
+                       :hostname (or hostname "localhost")
+                       :port (or port 27017))))
 
 (defmethod connection ((db database))
   (slot-value db 'connection))
@@ -33,12 +39,12 @@
   (if (stringp cmd)
       (run-command db `((,cmd . 1)))
       (let ((conn (connection db)))
-        (send-message conn
-                      (make-instance 'op-query
-                                     :number-to-return 1
-                                     :full-collection-name (format nil "~A.$cmd" (database-name db))
-                                     :return-field-selector cmd))
-        (first (op-reply-documents (read-reply conn))))))
+        (send-message-sync conn
+                           (make-instance 'op-query
+                                          :number-to-return 1
+                                          :full-collection-name (format nil "~A.$cmd" (database-name db))
+                                          :return-field-selector cmd))
+        (first (op-reply-documents (read-reply-sync conn))))))
 
 (defun db-stats (db)
   (run-command db "dbStats"))
@@ -53,11 +59,11 @@
   "Get a list of all the collection in this DATABASE"
   (let ((conn (connection database))
         (prefix (format nil "~A." (database-name database))))
-    (send-message conn
-                  (make-instance 'op-query
-                                 :full-collection-name (format nil "~A.system.namespaces" (database-name database))
-                                 :return-field-selector nil))
-    (iter (for item in (op-reply-documents (read-reply conn)))
+    (send-message-sync conn
+                       (make-instance 'op-query
+                                      :full-collection-name (format nil "~A.system.namespaces" (database-name database))
+                                      :return-field-selector nil))
+    (iter (for item in (op-reply-documents (read-reply-sync conn)))
           (let* ((fullname (gethash "name" item))
                  (name (second (multiple-value-list (starts-with-subseq prefix
                                                                         fullname
@@ -115,3 +121,8 @@ if validation fails."
               (search "corrupt" info))
       (error "~A invalid: ~A" name info))
     (string-trim #(#\Space #\Newline) info)))
+
+(defun collection (database name)
+  (make-instance 'collection
+                 :database database
+                 :name name))

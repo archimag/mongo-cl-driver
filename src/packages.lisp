@@ -47,8 +47,11 @@
            #:brigade-ref
 
            #:connection
-           #:send-message
-           #:read-reply
+           #:send-message-sync
+           #:send-message-async
+           #:send-and-read-sync
+           #:read-reply-sync
+           #:read-reply-async
 
            #:op-update
            #:op-insert
@@ -88,7 +91,9 @@
 
            #:find-one
            #:find-cursor
-           #:insert
+           #:insert-op
+           #:update-op
+           #:delete-op
 
            #:cursor
            #:with-cursor
@@ -99,6 +104,7 @@
   (:nicknames #:son-sugar)
   (:use #:cl #:iter)
   (:export #:son
+           #:use-son-printer
            #:with-son-printer
            #:print-son))
   

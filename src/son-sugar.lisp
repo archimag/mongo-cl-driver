@@ -20,6 +20,10 @@
                 (second item)))
     son))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; pprint
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defun print-son-hash-table (str ht)
   (format str
           "{~{~{~S : ~S~}~^, ~}}"
@@ -27,9 +31,12 @@
              for value being the hash-values of ht
              collect (list key value))))
 
+(defun use-son-printer ()
+  (set-pprint-dispatch 'hash-table #'print-son-hash-table))
+
 (defmacro with-son-printer (&body body)
   `(let ((*print-pprint-dispatch* (copy-pprint-dispatch)))
-     (set-pprint-dispatch 'hash-table #'print-son-hash-table)
+     (use-son-printer)
      ,@body))
   
 (defun print-son (obj &optional stream)

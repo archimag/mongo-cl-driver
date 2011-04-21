@@ -10,7 +10,7 @@
 (defclass collection ()
   ((database :initarg :database :reader collection-database)
    (name :initarg :name :reader collection-name)
-   (fullname :reader collection-fullname)))
+   (fullname :reader fullname)))
 
 (defmethod connection ((collection collection))
   (connection (collection-database collection)))
@@ -48,34 +48,45 @@
 
 (defmethod print-object ((col collection) stream)
   (print-unreadable-object (col stream :type t :identity t)
-    (princ (collection-fullname col) stream)))
+    (princ (fullname col) stream)))
 
 (defun find-one (collection &optional query)
-  (let ((conn (connection collection)))
-    (send-message conn
-                  (make-instance 'op-query
-                                 :number-to-return 1
-                                 :full-collection-name (collection-fullname collection)
-                                 :return-field-selector query))
-    (first (op-reply-documents (read-reply conn)))))
+  (first (op-reply-documents
+          (send-and-read-sync (connection collection)
+                              (make-instance 'op-query
+                                             :number-to-return 1
+                                             :full-collection-name (fullname collection)
+                                             :return-field-selector query)))))
 
 (defun find-cursor (collection &optional query)
-  (let ((conn (connection collection)))
-    (send-message conn
-                  (make-instance 'op-query
-                                 :full-collection-name (collection-fullname collection)
-                                 :return-field-selector query))
-    (let ((reply (read-reply conn)))
-      (make-instance 'cursor
-                     :id (op-reply-cursor-id reply)
-                     :collection collection
-                     :documents (op-reply-documents reply)))))
-
-(defun insert (collection &rest objects)
-  (when objects
-    (send-message (connection collection)
-                  (make-instance 'op-insert
-                                 :full-collection-name (collection-fullname collection)
-                                 :documents objects))))
-     
+  (let ((reply (send-and-read-sync (connection collection)
+                                   (make-instance 'op-query
+                                                  :full-collection-name (fullname collection)
+                                                  :return-field-selector query))))
+    (make-instance 'cursor
+                   :id (op-reply-cursor-id reply)
+                   :collection collection
+                   :documents (op-reply-documents reply))))
   
+(defun insert-op (collection &rest objects)
+  (when objects
+    (send-message-async (connection collection)
+                        (make-instance 'op-insert
+                                       :full-collection-name (fullname collection)
+                                       :documents objects))))
+
+(defun update-op (collection selector update &key upsert multi-update)
+  (send-message-async (connection collection)
+                      (make-instance 'op-update
+                                     :full-collection-name (fullname collection)
+                                     :selector selector
+                                     :update update
+                                     :upsert upsert
+                                     :multi-update multi-update)))
+
+(defun delete-op (collection selector &key single-remove)
+  (send-message-async (connection collection)
+                      (make-instance 'op-delete
+                                     :full-collection-name (fullname collection)
+                                     :selector selector
+                                     :single-remove single-remove)))

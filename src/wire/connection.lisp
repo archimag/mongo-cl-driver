@@ -29,9 +29,8 @@
           socket)))
 
 
-(defun send-message (conn msg &optional callback)
-  (let ((socket (connection-socket conn))
-        (brigade (make-instance 'brigade))
+(defun send-message (socket msg &key async callback)
+  (let ((brigade (make-instance 'brigade))
         (bytes-sent 0)
         (done-p nil)
         (total-size 0))
@@ -57,7 +56,7 @@
                (brigade-free-buckets brigade)
                (when callback (funcall callback)))))
       (cond
-        (callback
+        (async
          (iolib.multiplex:set-io-handler *event-base*
                                         (iolib.sockets:socket-os-fd socket)
                                         :write #'send-brigade))
@@ -70,9 +69,18 @@
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t)))))
       
       (values))))
-                      
 
-(defun read-reply (conn &optional callback &aux (socket (connection-socket conn)))
+(defun send-message-sync (connection message)
+  (send-message (connection-socket connection)
+                message))
+
+(defun send-message-async (connection message &optional callback)
+  (send-message (connection-socket connection)
+                message
+                :async t
+                :callback callback))
+
+(defun read-reply (socket &key async callback)
   (declare (optimize (debug 3)))
   (let ((brigade (make-instance 'brigade))
         (size nil)
@@ -119,7 +127,7 @@
                                    (decode-brigade)
                                 (brigade-free-buckets brigade))))))))
       (cond
-        (callback
+        (async
          (iolib.multiplex:set-io-handler *event-base*
                                         (iolib.sockets:socket-os-fd socket)
                                         :read #'read-brigade)
@@ -132,6 +140,20 @@
            (iter (while (not done-p))
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t))
            (decode-brigade)))))))
+
+(defun read-reply-sync (connection)
+  (read-reply (connection-socket connection)))
+
+(defun read-reply-async (connection callback)
+  (read-reply (connection-socket connection)
+              :async t
+              :callback callback))
+
+
+(defun send-and-read-sync (connection message)
+  (let ((socket (connection-socket connection)))
+    (send-message socket message)
+    (read-reply socket)))
 
 ;; (defparameter *connection* (make-instance 'connection))
 

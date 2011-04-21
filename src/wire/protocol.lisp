@@ -39,12 +39,11 @@
 
 (defclass message-slot-definition (standard-direct-slot-definition)
   ((bson-type :initarg :bson-type :reader message-slot-definition-bson-type)
-   (repetition-mode :initarg :mode :initform :single :reader message-slot-definition-repetition-mode)))
+   (list-p :initarg :list-p :initform nil :reader message-slot-definition-list-p)))
 
 (defclass message-effective-slot-definition (standard-effective-slot-definition)
   ((encoder :initform nil :initarg :encoder :reader message-effective-slot-encoder)
-   (decoder :initform nil :initarg :decoder :reader message-effective-slot-decoder)
-   (repetition-mode :initarg :mode :initform :single :reader message-effective-slot-repetition-mode)))
+   (decoder :initform nil :initarg :decoder :reader message-effective-slot-decoder)))
 
 (defmethod direct-slot-definition-class ((class message-class) &key)
   'message-slot-definition)
@@ -58,17 +57,23 @@
          (direct-slot (find name
                              direct-slots
                              :key #'slot-definition-name))
-        (bson-type (message-slot-definition-bson-type direct-slot)))
+         (bson-type (message-slot-definition-bson-type direct-slot))
+         (list-p (message-slot-definition-list-p direct-slot))
+         (encoder (or (find-symbol (format nil "ENCODE-~A" bson-type)
+                           '#:mongo-cl-driver.bson)
+                      (error "Can not find a encoder for ~A type" bson-type)))
+         (decoder (or (find-symbol (format nil "DECODE-~A" bson-type)
+                           '#:mongo-cl-driver.bson)
+                      (error "Can not find a decoder for ~A type" bson-type))))
+    
     (setf (slot-value normal-slot 'encoder)
-          (or (find-symbol (format nil "ENCODE-~A" bson-type)
-                           '#:mongo-cl-driver.bson)
-              (error "Can not find a encoder for ~A type" bson-type)))
+          (if list-p
+              #'(lambda (value target)
+                  (iter (for item in value)
+                        (funcall encoder item target)))
+              encoder))
     (setf (slot-value normal-slot 'decoder)
-          (or (find-symbol (format nil "DECODE-~A" bson-type)
-                           '#:mongo-cl-driver.bson)
-              (error "Can not find a decoder for ~A type" bson-type)))
-    (setf (slot-value normal-slot 'repetition-mode)
-          (message-slot-definition-repetition-mode direct-slot))
+          decoder)
     normal-slot))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -80,12 +85,10 @@
     :accessor message-length
     :bson-type :int32)
    (request-id
-    :initarg :request-id
     :initform 0
     :accessor request-id
     :bson-type :int32)
    (response-to
-    :initarg :response-to
     :accessor response-to
     :initform 0
     :bson-type :int32)
@@ -112,7 +115,6 @@
    :initform ""
    :bson-type :cstring)
   (flags
-   :initarg :flags
    :initform 0
    :bson-type :int32)
   (selector
@@ -122,6 +124,17 @@
    :initarg :update
    :bson-type :document))
 
+(defmethod shared-initialize :after ((msg op-update) slot-names &key upsert multi-update &allow-other-keys)
+  (let ((bits nil))
+    (when upsert
+      (push 0  bits))
+    (when multi-update
+      (push 1 bits))
+    (dolist (bit bits)
+      (setf (ldb (byte 1 bit)
+                 (slot-value msg 'flags))
+            1))))
+          
 (define-protocol-message op-insert +op-insert+
   (zero
    :initform 0
@@ -134,7 +147,7 @@
    :initarg :documents
    :initform nil
    :bson-type :document
-   :mode :maybe-few))
+   :list-p t))
 
 (define-protocol-message op-query +op-query+
   (flags
@@ -156,8 +169,7 @@
   (return-field-selector
    :initarg :return-field-selector
    :initform nil
-   :bson-type :document
-   :mode :optional))
+   :bson-type :document))
 
 (define-protocol-message op-getmore +op-get-more+
   (zero
@@ -183,12 +195,17 @@
    :initform ""
    :bson-type :cstring)
   (flags
-   :initarg :flags
    :initform 0
    :bson-type :int32)
   (selector
    :initarg :selector
    :bson-type :document))
+
+(defmethod shared-initialize :after ((msg op-delete) slot-names &key single-remove &allow-other-keys)
+  (when single-remove
+    (setf (ldb (byte 1 0)
+               (slot-value msg 'flags))
+          1)))
 
 (define-protocol-message op-kill-cursors +op-kill-cursors+
   (zero
@@ -200,7 +217,7 @@
    :initform nil
    :initarg :cursor-ids
    :bson-type :int64
-   :mode :maybe-few))
+   :list-p t))
 
 (defmethod shared-initialize :after ((msg op-kill-cursors) slot-names &key &allow-other-keys)
   (setf (slot-value msg 'number-of-cursor-ids)
@@ -223,7 +240,7 @@
    :reader op-reply-documents
    :initform nil
    :bson-type :document
-   :mode :maybe-few))
+   :list-p t))
                   
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -253,17 +270,11 @@
                 (dotimes (i 4)
                   (encode-byte 0 target))
                 (iter (for slot in (cdr (class-slots (class-of message))))
-                      (for mode = (message-effective-slot-repetition-mode slot))
                       (for value = (slot-value-using-class (class-of message)
                                                            message
                                                            slot))
                       (for encoder = (message-effective-slot-encoder slot))
-                      (case mode
-                        ((:single :optional)
-                         (funcall encoder value target))
-                        (:maybe-few
-                         (iter (for item in value)
-                               (funcall encoder item target)))))))
+                      (funcall encoder value target))))
         (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0)))
     (encode-int32 size arr)
     (bson-target-replace target arr 0)
