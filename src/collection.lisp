@@ -82,6 +82,14 @@
                    :collection collection
                    :documents (op-reply-documents reply))))
 
+(defun find-list (collection &optional query fields)
+  (let ((result nil))
+    (with-cursor (cursor collection query fields)
+      (docursor (item cursor)
+        (push item result)))
+    (nreverse result)))
+    
+
 (defun find-cursor-async (collection query fields callback)
   (send-and-read-async (connection collection)
                        (make-instance 'op-query
@@ -98,10 +106,10 @@
   
 (defun insert-op (collection &rest objects)
   (when objects
-    (send-message-async (connection collection)
-                        (make-instance 'op-insert
-                                       :full-collection-name (fullname collection)
-                                       :documents objects))))
+    (send-message-sync (connection collection)
+                       (make-instance 'op-insert
+                                      :full-collection-name (fullname collection)
+                                      :documents objects))))
 
 (defun update-op (collection selector update &key upsert multi-update)
   (send-message-async (connection collection)

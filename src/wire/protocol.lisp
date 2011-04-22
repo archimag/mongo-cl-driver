@@ -164,7 +164,7 @@
    :bson-type :int32)
   (number-to-return
    :initarg :number-to-return
-   :initform 20
+   :initform 0
    :bson-type :int32)
   (query
    :initarg :query

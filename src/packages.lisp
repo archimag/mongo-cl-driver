@@ -93,6 +93,8 @@
 
            #:find-one
            #:find-one-async
+           #:find-cursor
+           #:find-list
            #:find-cursor-async
            #:insert-op
            #:update-op
