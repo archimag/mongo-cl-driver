@@ -47,6 +47,7 @@
            #:brigade-ref
 
            #:connection
+           #:close-connection
            #:send-message-sync
            #:send-message-async
            #:send-and-read-sync
@@ -77,6 +78,8 @@
            #:object-id
 
            #:database
+           #:close-database
+           #:with-database
            #:run-command
            #:last-error
            #:db-stats

@@ -28,6 +28,8 @@
     (setf (slot-value conn 'socket)
           socket)))
 
+(defun close-connection (connection)
+  (close (connection-socket connection)))
 
 (defun send-message (socket msg &key async callback)
   (let ((brigade (make-instance 'brigade))

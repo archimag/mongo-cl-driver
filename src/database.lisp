@@ -28,6 +28,17 @@
                        :hostname (or hostname "localhost")
                        :port (or port 27017))))
 
+(defun close-database (database)
+  (close-connection (connection database))
+  (setf (slot-value database 'connection) nil
+        (slot-value database 'name) nil))
+
+(defmacro with-database ((db name &key hostname port) &body body)
+  `(let ((,db (make-instance 'database :name ,name :hostname ,hostname :port ,port)))
+     (unwind-protect
+          (progn ,@body)
+       (close-database ,db))))
+
 (defmethod connection ((db database))
   (slot-value db 'connection))
 
