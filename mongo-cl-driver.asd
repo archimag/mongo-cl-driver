@@ -7,7 +7,7 @@
 
 (defsystem #:mongo-cl-driver
     :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets
-                 #:bordeaux-threads)
+                 #:bordeaux-threads #:local-time)
     :components
     ((:module "src"
               :components

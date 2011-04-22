@@ -253,6 +253,18 @@
       (decode-byte source))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; UTC datetime
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun encode-utc-datetime (timestamp target)
+  (encode-int64 (* (local-time:timestamp-to-unix timestamp) 1000)
+                target))
+
+(defun decode-utc-dateime (source)
+  (local-time:unix-to-timestamp (floor (decode-int64 source) 1000)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; document
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -391,6 +403,11 @@
   (encode-ename key target)
   (encode-object-id value target))
 
+(defmethod encode-element (key (value local-time:timestamp) target)
+  (encode-byte #x09 target)
+  (encode-ename key target)
+  (encode-utc-datetime value target))
+
 (defun decode-element (source &key (identifier-to-lisp *bson-identifier-name-to-lisp*))
   (declare (optimize (debug 3)))
   (flet ((constant-decoder (val)
@@ -410,7 +427,7 @@
                      (#x06 (constant-decoder :undefined))
                      (#x07 'decode-object-id)
                      (#x08 'decode-boolean)
-                     (#x09 #'unimplemented)
+                     (#x09 'decode-utc-dateime)
                      (#x0A (constant-decoder nil))
                      (#x0B #'unimplemented)
                      (#x0C #'unimplemented)

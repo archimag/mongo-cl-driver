@@ -6,9 +6,10 @@
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
 (defpackage #:mongo-cl-driver.test
-  (:use #:cl #:iter #:lift
+  (:use #:cl #:iter #:lift #:alexandria
         #:mongo-cl-driver.bson
-        #:mongo-cl-driver.wire)
+        #:mongo-cl-driver.wire
+        #:mongo-cl-driver.son-sugar)
   (:export #:run-mongo-cl-driver-tests))
 
 (in-package #:mongo-cl-driver.test)
