@@ -46,15 +46,16 @@
                                             :full-collection-name (fullname (cursor-collection cursor))
                                             :number-to-return 20)))))
 
-(defmacro with-cursor ((name collection &optional query) &body body)
-  `(let ((,name (find-cursor ,collection ,query)))
+(defmacro with-cursor ((name collection &optional query fields) &body body)
+  `(let ((,name (find-cursor ,collection ,query ,fields)))
      (unwind-protect
           (progn ,@body)
        (close-cursor ,name))))
 
-(defmacro with-cursor-async ((name collection &optional query) &body body)
+(defmacro with-cursor-async ((name collection &optional query fields) &body body)
   `(find-cursor-async ,collection
                       ,query
+                      ,fields
                       (lambda (,name) ,@body)))
 
 (defmacro docursor ((var cursor) &body body)

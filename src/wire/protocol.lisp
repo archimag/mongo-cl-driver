@@ -166,6 +166,9 @@
    :initarg :number-to-return
    :initform 20
    :bson-type :int32)
+  (query
+   :initarg :query
+   :bson-type :document)
   (return-field-selector
    :initarg :return-field-selector
    :initform nil

@@ -43,7 +43,7 @@
                                   (make-instance 'op-query
                                                  :number-to-return 1
                                                  :full-collection-name (format nil "~A.$cmd" (database-name db))
-                                                 :return-field-selector cmd))))))
+                                                 :query cmd))))))
              
 (defun db-stats (db)
   (run-command db "dbStats"))
@@ -60,7 +60,7 @@
         (reply (send-and-read-sync (connection database)
                                    (make-instance 'op-query
                                                   :full-collection-name (format nil "~A.system.namespaces" (database-name database))
-                                                  :return-field-selector nil))))
+                                                  :query nil))))
     (iter (for item in (op-reply-documents reply))
           (let* ((fullname (gethash "name" item))
                  (name (second (multiple-value-list (starts-with-subseq prefix

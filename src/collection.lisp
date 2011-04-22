@@ -50,41 +50,44 @@
   (print-unreadable-object (col stream :type t :identity t)
     (princ (fullname col) stream)))
 
-(defun find-one (collection &optional query)
+(defun find-one (collection &optional query selector)
   (first (op-reply-documents
           (send-and-read-sync (connection collection)
                               (make-instance 'op-query
                                              :number-to-return 1
                                              :full-collection-name (fullname collection)
-                                             :return-field-selector query)))))
+                                             :query query
+                                             :return-field-selector selector)))))
 
 (defun find-one-async (collection query callback)
   (send-and-read-async (connection collection)
                        (make-instance 'op-query
                                       :number-to-return 1
                                       :full-collection-name (fullname collection)
-                                      :return-field-selector query)
+                                      :query query)
                        #'(lambda (obj)
                            (funcall callback
                                     (first (op-reply-documents obj))))))
                        
   
 
-(defun find-cursor (collection &optional query)
+(defun find-cursor (collection &optional query fields)
   (let ((reply (send-and-read-sync (connection collection)
                                    (make-instance 'op-query
                                                   :full-collection-name (fullname collection)
-                                                  :return-field-selector query))))
+                                                  :query query
+                                                  :return-field-selector fields))))
     (make-instance 'cursor
                    :id (op-reply-cursor-id reply)
                    :collection collection
                    :documents (op-reply-documents reply))))
 
-(defun find-cursor-async (collection query callback)
+(defun find-cursor-async (collection query fields callback)
   (send-and-read-async (connection collection)
                        (make-instance 'op-query
                                       :full-collection-name (fullname collection)
-                                      :return-field-selector query)
+                                      :query query
+                                      :return-field-selector fields)
                        #'(lambda (reply)
                            (funcall callback
                                     (make-instance 'cursor
