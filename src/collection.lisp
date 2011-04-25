@@ -82,14 +82,20 @@
                    :collection collection
                    :documents (op-reply-documents reply))))
 
-(defun find-list (collection &optional query fields)
-  (let ((result nil))
-    (with-cursor (cursor collection query fields)
-      (docursor (item cursor)
-        (push item result)))
-    (nreverse result)))
+(defun find-list (collection &key query fields (limit 0) (skip 0))
+  (let ((reply (send-and-read-sync (connection collection)
+                                   (make-instance 'op-query
+                                                  :full-collection-name (fullname collection)
+                                                  :number-to-return limit
+                                                  :number-to-skip skip
+                                                  :query query
+                                                  :return-field-selector fields))))
+    (unwind-protect
+         (op-reply-documents reply)
+      (send-message-sync (connection collection)
+                         (make-instance 'op-kill-cursors
+                                        :cursor-ids (list (op-reply-cursor-id reply)))))))
     
-
 (defun find-cursor-async (collection query fields callback)
   (send-and-read-async (connection collection)
                        (make-instance 'op-query

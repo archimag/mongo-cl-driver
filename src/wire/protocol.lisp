@@ -298,6 +298,8 @@
     (iter (for i from 0 below (op-reply-number-returned reply))
           (push (decode-document source)
                 (slot-value reply 'documents)))
+    (setf (slot-value reply 'documents)
+          (nreverse (slot-value reply 'documents)))
     reply))
           
           
