@@ -131,6 +131,17 @@ if validation fails."
       (error "~A invalid: ~A" name info))
     (string-trim #(#\Space #\Newline) info)))
 
+(defun collection-count (collection &optional query)
+  (let ((qr (make-hash-table :test 'equal)))
+    (setf (gethash "count" qr)
+          (collection-name collection))
+    (when query
+      (setf (gethash "query" qr) query))
+    (gethash "n"
+             (run-command (collection-database collection)
+                 qr))))
+               
+
 (defun collection (database name)
   (make-instance 'collection
                  :database database

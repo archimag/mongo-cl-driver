@@ -90,6 +90,7 @@
            #:create-collection
            #:drop-collection
            #:validate-collection
+           #:collection-count
 
            #:find-one
            #:find-one-async
