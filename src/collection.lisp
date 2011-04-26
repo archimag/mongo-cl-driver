@@ -118,17 +118,17 @@
                                       :documents objects))))
 
 (defun update-op (collection selector update &key upsert multi-update)
-  (send-message-async (connection collection)
-                      (make-instance 'op-update
-                                     :full-collection-name (fullname collection)
-                                     :selector selector
-                                     :update update
-                                     :upsert upsert
-                                     :multi-update multi-update)))
+  (send-message-sync (connection collection)
+                     (make-instance 'op-update
+                                    :full-collection-name (fullname collection)
+                                    :selector selector
+                                    :update update
+                                    :upsert upsert
+                                    :multi-update multi-update)))
 
 (defun delete-op (collection selector &key single-remove)
-  (send-message-async (connection collection)
-                      (make-instance 'op-delete
-                                     :full-collection-name (fullname collection)
-                                     :selector selector
-                                     :single-remove single-remove)))
+  (send-message-sync (connection collection)
+                     (make-instance 'op-delete
+                                    :full-collection-name (fullname collection)
+                                    :selector selector
+                                    :single-remove single-remove)))

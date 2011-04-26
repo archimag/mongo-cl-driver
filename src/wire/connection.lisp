@@ -7,6 +7,9 @@
 
 (in-package #:mongo-cl-driver.wire)
 
+(defparameter *read-timeout* 20)
+(defparameter *write-timeout* 20)
+
 (defparameter *event-base* (make-instance 'iolib.multiplex:event-base))
 
 (bt:make-thread #'(lambda ()
@@ -42,7 +45,13 @@
           (brigade-total-size brigade))
     
     (flet ((send-brigade (fd event errorp)
-             (declare (ignore event errorp))
+             (declare (ignore event))
+
+             (when errorp
+               (cond
+                 (async (funcall callback errorp nil)
+                        (return-from send-brigade))
+                 (t (error errorp))))
              
              (multiple-value-bind (index pos) (floor bytes-sent +bucket-size+)
                (incf bytes-sent
@@ -56,17 +65,20 @@
                (iolib.multiplex:remove-fd-handlers *event-base* fd :write t)
                (setf done-p t)
                (brigade-free-buckets brigade)
-               (when callback (funcall callback)))))
+               (when async
+                 (funcall callback nil)))))
       (cond
         (async
          (iolib.multiplex:set-io-handler *event-base*
                                         (iolib.sockets:socket-os-fd socket)
-                                        :write #'send-brigade))
+                                        :write #'send-brigade
+                                        :timeout *write-timeout*))
         (t
          (iolib.multiplex:with-event-base (*event-base*)
            (iolib.multiplex:set-io-handler *event-base*
                                            (iolib.sockets:socket-os-fd socket)
-                                           :write #'send-brigade)
+                                           :write #'send-brigade
+                                           :timeout *write-timeout*)
            (iter (while (not done-p))
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t)))))
       
@@ -95,7 +107,14 @@
                  (brigade-free-buckets brigade)))
              
              (read-brigade (fd event errorp)
-               (declare (ignore event errorp))
+               (declare (ignore event))
+
+               (when errorp
+                 (cond
+                   (async (funcall callback errorp nil)
+                          (return-from read-brigade))
+                   (t (error errorp))))
+             
                (multiple-value-bind (buffer count)
                    (iolib.sockets:receive-from socket
                                                :buffer (aref (brigade-buckets brigade)
@@ -123,8 +142,9 @@
                                                        fd
                                                        :read t)
                    (setf done-p t)
-                   (when callback
+                   (when async
                      (funcall callback
+                              nil
                               (unwind-protect
                                    (decode-brigade)
                                 (brigade-free-buckets brigade))))))))
@@ -132,13 +152,15 @@
         (async
          (iolib.multiplex:set-io-handler *event-base*
                                         (iolib.sockets:socket-os-fd socket)
-                                        :read #'read-brigade)
+                                        :read #'read-brigade
+                                        :timeout *read-timeout*)
          (values))
         (t
          (iolib.multiplex:with-event-base (*event-base*)
            (iolib.multiplex:set-io-handler *event-base*
                                            (iolib.sockets:socket-os-fd socket)
-                                           :read #'read-brigade)
+                                           :read #'read-brigade
+                                           :timeout *read-timeout*)
            (iter (while (not done-p))
                  (iolib.multiplex:event-dispatch *event-base* :one-shot t))
            (decode-brigade)))))))
@@ -159,10 +181,12 @@
 
 (defun send-and-read-async (connection message callback)
   (let ((socket (connection-socket connection)))
-    (flet ((read-and-call ()
-             (read-reply socket
+    (flet ((read-and-call (errorp)
+             (cond
+               (errorp (funcall callback errorp nil))
+               (t (read-reply socket
                          :async t
-                         :callback callback)))
+                         :callback callback)))))
     (send-message socket
                   message
                   :async t

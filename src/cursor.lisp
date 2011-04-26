@@ -28,7 +28,7 @@
     (princ (cursor-id cursor) stream)))
                          
 (defun close-cursor (cursor)
-  (send-message-async (connection cursor)
+  (send-message-sync (connection cursor)
                       (make-instance 'op-kill-cursors
                                      :cursor-ids (list (cursor-id cursor))))
   (reinitialize-instance cursor

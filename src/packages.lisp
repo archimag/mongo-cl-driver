@@ -84,6 +84,8 @@
            #:last-error
            #:db-stats
            #:cursor-info
+           #:authenticate
+           #:logout
 
            #:collection
            #:collection-names

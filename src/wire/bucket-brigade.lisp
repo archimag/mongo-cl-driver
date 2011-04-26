@@ -9,15 +9,19 @@
 
 (defconstant +bucket-size+ 4096)
 
+(defparameter *bucket-lock* (bordeaux-threads:make-lock "Bucket Lock"))
+
 (defvar *bucket-pool* nil)
 
 (defun alloc-bucket ()
-  (or (pop *bucket-pool*)
+  (or (bordeaux-threads:with-recursive-lock-held (*bucket-lock*)
+        (pop *bucket-pool*))
       (make-array +bucket-size+ :element-type '(unsigned-byte 8))))
 
 (defun free-bucket (bucket)
   (check-type bucket (simple-array (unsigned-byte 8) (4096)))
-  (push bucket *bucket-pool*))
+  (bordeaux-threads:with-recursive-lock-held (*bucket-lock*)
+    (push bucket *bucket-pool*)))
 
 (defclass brigade ()
   ((buckets :initform (make-array 0 :fill-pointer 0 :adjustable t)

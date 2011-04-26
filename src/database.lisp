@@ -146,3 +146,30 @@ if validation fails."
   (make-instance 'collection
                  :database database
                  :name name))
+
+;;;; auth
+
+(defun authenticate (database username password)
+  (flet ((md5 (text)
+           (ironclad:byte-array-to-hex-string
+            (ironclad:digest-sequence
+             :md5 (babel:string-to-octets text
+                                          :encoding :utf-8)))))
+    (let ((son (make-hash-table :test 'equal))
+          (nonce (gethash "nonce" (run-command database "getnonce"))))
+      (setf (gethash "authenticate" son) 1
+            (gethash "user" son) username
+            (gethash "nonce" son) nonce)
+      
+      (setf (gethash "key" son)
+            (md5 (format nil
+                         "~A~A~A"
+                         nonce
+                         username
+                         (md5 (format nil "~A:mongo:~A" username password)))))
+      
+      (run-command database son))))
+
+(defun logout (database)
+  (run-command database "logout"))
+                   
