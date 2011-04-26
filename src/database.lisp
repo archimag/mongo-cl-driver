@@ -22,11 +22,13 @@
   ((connection :initform nil)
    (name :initarg :name :reader database-name)))
 
-(defmethod shared-initialize :after ((db database) slot-names &key hostname port &allow-other-keys)
+(defmethod shared-initialize :after ((db database) slot-names &key hostname port username password &allow-other-keys)
   (setf (slot-value db 'connection)
         (make-instance 'connection
                        :hostname (or hostname "localhost")
-                       :port (or port 27017))))
+                       :port (or port 27017)))
+  (when (and username password)
+    (authenticate db username password)))
 
 (defun close-database (database)
   (close-connection (connection database))
