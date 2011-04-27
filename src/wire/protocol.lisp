@@ -86,11 +86,13 @@
     :bson-type :int32)
    (request-id
     :initform 0
+    :initarg :request-id
     :accessor request-id
     :bson-type :int32)
    (response-to
-    :accessor response-to
     :initform 0
+    :initarg :response-to
+    :accessor response-to
     :bson-type :int32)
    (opcode
     :initarg :opcode

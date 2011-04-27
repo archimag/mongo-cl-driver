@@ -7,7 +7,7 @@
 
 (defsystem #:mongo-cl-driver
     :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets
-                 #:bordeaux-threads #:local-time)
+                 #:bordeaux-threads #:local-time #:ironclad)
     :components
     ((:module "src"
               :components
@@ -32,7 +32,8 @@
   :components ((:module "t"
                         :components
                         ((:file "suite")
-                         (:file "bson" :depends-on ("suite"))))))
+                         (:file "bson" :depends-on ("suite"))
+                         (:file "wire" :depends-on ("suite"))))))
 
 (defmethod perform ((o test-op) (c (eql (find-system '#:mongo-cl-driver))))
   (operate 'load-op '#:mongo-cl-driver)
