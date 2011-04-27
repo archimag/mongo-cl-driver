@@ -7,14 +7,15 @@
 
 (defsystem #:mongo-cl-driver
     :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets
-                 #:bordeaux-threads #:local-time)
+                 #:bordeaux-threads #:local-time #:ironclad)
     :components
     ((:module "src"
               :components
               ((:file "packages")
                (:module "bson"
                         :components
-                        ((:file "bson"))
+                        ((:file "types")
+                         (:file "bson" :depends-on ("types")))
                         :depends-on ("packages"))
                (:module "wire"
                         :components

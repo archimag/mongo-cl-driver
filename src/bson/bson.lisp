@@ -7,27 +7,9 @@
 
 (in-package #:mongo-cl-driver.bson)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; BSON types
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defconstant +min-key+ '+min-key+)
-(defconstant +max-key+ '+max-key+)
-
-(defclass object-id ()
-  ((raw :initform (make-array 12 :element-type '(unsigned-byte 8)))))
-
-(defmethod shared-initialize :after ((id object-id) slot-names &key raw)
-  (when raw
-    (replace (slot-value id 'raw) raw)))
-
-(defmethod print-object ((id object-id) stream)
-  (print-unreadable-object (id stream :type t :identity nil)
-    (iter (for ch in-vector (slot-value id 'raw))
-          (format stream "~2,'0X" ch))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; BSON target minimal interface
+;;;; BSON target replace interface
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defgeneric bson-target-replace (target sequence start)
@@ -37,7 +19,7 @@
   (replace target sequence :start1 start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Encode/decode generic methods
+;;;; Encode/decode byte
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defvar *encoded-bytes-count*)
@@ -74,7 +56,7 @@
        (- *encoded-bytes-count* ,encode-bytes-count))))
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Basic types
+;;;; int32
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun encode-int32 (i32 target)
@@ -93,6 +75,10 @@
         (1- (- (logandc2 #xFFFFFFFF ui32)))
         ui32)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; int64
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defun encode-int64 (i64 target)
   "Encode 64-bit integer to TARGET"
   (iter (for i from 0 below 64 by 8)
@@ -107,6 +93,10 @@
     (if (logbitp 63 ui64)
         (1- (- (logandc2 #xFFFFFFFFFFFFFFFF ui64)))
         ui64)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; 64-bit IEEE 754 floating point
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun encode-double (double source)
   (encode-int64 (ieee-floats:encode-float64 double)
@@ -263,6 +253,88 @@
 (defun decode-utc-dateime (source)
   (local-time:unix-to-timestamp (floor (decode-int64 source) 1000)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; binary data
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun encode-binary-data (binary target)
+  (encode-int32 (length (binary-data-octets binary)) target)
+  (encode-byte (case (binary-data-subtype binary)
+                 (:generic      #x00)
+                 (:function     #x01)
+                 (:uuid         #x03)
+                 (:md5          #x05)
+                 (:user-defined #x80))
+               target)
+  (iter (for byte in-vector (binary-data-octets binary))
+        (encode-byte byte target)))
+
+(defun decode-binary-data (source)
+  (let* ((size (decode-int32 source))
+         (subtype (decode-byte source))
+         (data (make-array size :element-type 'ub8)))
+    (dotimes (i size)
+      (setf (aref data i)
+            (decode-byte source)))
+    (make-instance 'binary-data
+                   :type (case subtype
+                           ((#x00 #x02) :generic)
+                           (#x01        :function)
+                           (#x03        :uuid)
+                           (#x05        :md5)
+                           (#x80        :user-defined))
+                   :octets data)))
+    
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Regexs
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun encode-regex (regex target)
+  (encode-cstring (regex-pattern regex) target)
+  (encode-cstring (regex-options regex) target))
+
+(defun decode-regex (source)
+  (make-instance 'regex
+                 :pattern (decode-cstring source)
+                 :options (decode-cstring source)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; JavaScript w/ scope
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun encode-javascript-w-scope (js target &aux (index *encoded-bytes-count*))
+  (let ((count (prog1 (with-count-encoded-bytes
+                        (dotimes (i 4)
+                          (encode-byte 0 target))
+                        (encode-string (javascript-code js) target)
+                        (encode-document (javascript-scope js) target))))
+        (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0))
+        (*encoded-bytes-count* 0))
+    (encode-int32 count arr)
+    (bson-target-replace target arr index)))
+
+(defun decode-javascript-w-scope (source)
+  (let ((end (+ *decoded-bytes-count* (decode-int32 source)))
+        (code (decode-string source))
+        (scope (decode-document source)))
+    (unless (= end *decoded-bytes-count*)
+      (error "Bad format"))
+    (make-instance 'javascript-w-scope
+                   :code code
+                   :scope scope)))
+        
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; MongoDB internal timestamp
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun encode-mongo-timestamp (timestamp target)
+  (encode-int64 (mongo-timestamp-value timestamp)
+                target))
+
+(defun decode-mongo-timestamp (source)
+  (make-instance 'mongo-timestamp
+                 :value (decode-int64 source)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; document
@@ -408,6 +480,34 @@
   (encode-ename key target)
   (encode-utc-datetime value target))
 
+(defmethod encode-element (key (value binary-data) target)
+  (encode-byte #x05 target)
+  (encode-ename key target)
+  (encode-binary-data value target))
+
+(defmethod encode-element (key (value regex) target)
+  (encode-byte #x0B target)
+  (encode-ename key target)
+  (encode-regex value target))
+
+(defmethod encode-element (key (value javascript-w-scope) target)
+  (encode-byte #x0F target)
+  (encode-ename key target)
+  (encode-javascript-w-scope value target))
+
+(defmethod encode-element (key (value mongo-timestamp) target)
+  (encode-byte #x11 target)
+  (encode-ename key target)
+  (encode-mongo-timestamp value target))
+
+(defmethod encode-element (key (value (eql +min-key+)) target)
+  (encode-byte #xFF target)
+  (encode-ename key target))
+
+(defmethod encode-element (key (value (eql +max-key+)) target)
+  (encode-byte #x7F target)
+  (encode-ename key target))
+
 (defun decode-element (source &key (identifier-to-lisp *bson-identifier-name-to-lisp*))
   (declare (optimize (debug 3)))
   (flet ((constant-decoder (val)
@@ -419,26 +519,26 @@
            (error "Unimplemented decoder (")))
     (let* ((code (decode-byte source))
            (decoder (case code
-                     (#x01 'decode-double)
-                     (#x02 'decode-string)
-                     (#x03 'decode-document)
-                     (#x04 'decode-array)
-                     (#x05 #'unimplemented)
+                     (#x01 #'decode-double)
+                     (#x02 #'decode-string)
+                     (#x03 #'decode-document)
+                     (#x04 #'decode-array)
+                     (#x05 #'decode-binary-data)
                      (#x06 (constant-decoder :undefined))
-                     (#x07 'decode-object-id)
-                     (#x08 'decode-boolean)
-                     (#x09 'decode-utc-dateime)
+                     (#x07 #'decode-object-id)
+                     (#x08 #'decode-boolean)
+                     (#x09 #'decode-utc-dateime)
                      (#x0A (constant-decoder nil))
-                     (#x0B #'unimplemented)
+                     (#x0B #'decode-regex)
                      (#x0C #'unimplemented)
-                     (#x0D #'unimplemented)
+                     (#x0D #'decode-javascript-w-scope)
                      (#x0E #'unimplemented)
                      (#x0F #'unimplemented)
                      (#x10 #'decode-int32)
-                     (#x11 #'unimplemented)
+                     (#x11 #'decode-javascript-w-scope)
                      (#x12 #'decode-int64)
-                     (#xFF #'unimplemented)
-                     (#x7F #'unimplemented))))
+                     (#xFF (constant-decoder +min-key+))
+                     (#x7F (constant-decoder +max-key+)))))
       (cons (let ((*bson-identifier-name-to-lisp* identifier-to-lisp))
               (decode-ename source))
             (funcall decoder source)))))

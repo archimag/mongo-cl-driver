@@ -35,8 +35,13 @@
   (setf (slot-value database 'connection) nil
         (slot-value database 'name) nil))
 
-(defmacro with-database ((db name &key hostname port) &body body)
-  `(let ((,db (make-instance 'database :name ,name :hostname ,hostname :port ,port)))
+(defmacro with-database ((db name &key hostname port username password) &body body)
+  `(let ((,db (make-instance 'database
+                             :name ,name
+                             :hostname ,hostname
+                             :port ,port
+                             :username ,username
+                             :password ,password)))
      (unwind-protect
           (progn ,@body)
        (close-database ,db))))
