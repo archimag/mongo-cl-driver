@@ -9,9 +9,13 @@
 
 (deftestsuite mongo-bson-test (mogno-cl-driver-test) ())
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; encode-basic-test
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (addtest (mongo-bson-test)
   encode-basic-test-1
-  (ensure-same (encode () :list)
+  (ensure-same (encode (son) :list)
                '(#x05 #x00 #x00 #x00 #x00)))
 
 (addtest (mongo-bson-test)
@@ -58,6 +62,40 @@
 
 (addtest (mongo-bson-test)
   encode-basic-test-9
+  (ensure-same (encode (son "test" (make-instance 'binary-data
+                                                  :octets (babel:string-to-octets "test" :encoding :utf-8)))
+                       :list)
+               (list #x14 #x00 #x00 #x00 #x05 #x74 #x65 #x73 #x74 #x00 #x04 #x00 #x00
+                     #x00 #x00 #x74 #x65 #x73 #x74 #x00)))
+
+(addtest (mongo-bson-test)
+  encode-basic-test-10
+  (ensure-same (encode (son "test" (make-instance 'binary-data
+                                                  :octets (babel:string-to-octets "test" :encoding :utf-8)
+                                                  :subtype :user-defined))
+                       :list)
+               (list #x14 #x00 #x00 #x00 #x05 #x74 #x65 #x73 #x74 #x00 #x04 #x00 #x00
+                     #x00 #x80 #x74 #x65 #x73 #x74 #x00)))
+
+(addtest (mongo-bson-test)
+  encode-basic-test-11
+  (ensure-same (encode (son "regex" (make-instance 'regex
+                                                   :pattern "a*b"
+                                                   :options "i"))
+                       :list)
+               (list #x12 #x00 #x00 #x00 #x0B #x72 #x65 #x67 #x65 #x78 #x00 #x61 #x2A
+                     #x62 #x00 #x69 #x00 #x00)))
+
+(addtest (mongo-bson-test)
+  encode-basic-test-12
+  (ensure-same (encode (son "$where" (make-instance 'javascript :code "test"))
+                       :list)
+               (list #x1F #x00 #x00 #x00 #x0F #x24 #x77 #x68 #x65 #x72 #x65 #x00 #x12
+                     #x00 #x00 #x00 #x05 #x00 #x00 #x00 #x74 #x65 #x73 #x74 #x00 #x05
+                     #x00 #x00 #x00 #x00 #x00)))
+
+(addtest (mongo-bson-test)
+  encode-basic-test-13
   (ensure-same (encode
                 (son "oid" (make-instance 'mongo.bson:object-id
                                           :raw (list #x00 #x01 #x02 #x03 #x04 #x05 #x06 #x07 #x08 #x09 #x0A #x0B)))
@@ -66,12 +104,16 @@
                      #x04 #x05 #x06 #x07 #x08 #x09 #x0A #x0B #x00)))
 
 (addtest (mongo-bson-test)
-  encode-basic-test-10
+  encode-basic-test-14
   (ensure-same (encode
                 (son "date" (local-time:encode-timestamp 0 11 30 0 8 1 2007 :timezone local-time:+utc-zone+))
                 :list)
                (list #x13 #x00 #x00 #x00 #x09 #x64 #x61 #x74 #x65 #x00 #x38 #xBE #x1C
                      #xFF #x0F #x01 #x00 #x00 #x00)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; encode-then-decode
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (addtest (mongo-bson-test)
   encode-then-decode-1
@@ -135,3 +177,86 @@
     (ensure-same "date" name)
     (ensure (local-time:timestamp= date
                                    (local-time:encode-timestamp 0 0 0 2 4 4 1993 :timezone local-time:+utc-zone+)))))
+
+(addtest (mongo-bson-test)
+  encode-the-decode-10
+  (destructuring-bind ((name . obj))
+      (hash-table-alist
+       (decode (encode (son "a binary"
+                            (make-instance 'binary-data
+                                           :octets (coerce #(1 2 3 4 5 6 7 8 9 10) 'ub8-vector)
+                                           :subtype :function))
+                       :vector)))
+    (ensure-same "a binary" name)
+    (ensure-same :function 
+                 (binary-data-subtype obj))
+    (ensure-same '(1 2 3 4 5 6 7 8 9 10)
+                 (coerce (binary-data-octets obj) 'list))))
+
+(addtest (mongo-bson-test)
+  encode-the-decode-11
+  (destructuring-bind ((name . obj))
+      (hash-table-alist
+       (decode (encode (son "a binary"
+                            (make-instance 'binary-data
+                                           :octets (coerce #(1 2 3 4 5 6 7 8 9 10) 'ub8-vector)
+                                           :subtype :uuid))
+                       :vector)))
+    (ensure-same "a binary" name)
+    (ensure-same :uuid
+                 (binary-data-subtype obj))
+    (ensure-same '(1 2 3 4 5 6 7 8 9 10)
+                 (coerce (binary-data-octets obj) 'list))))
+
+(addtest (mongo-bson-test)
+  encode-the-decode-12
+  (destructuring-bind ((name . obj))
+      (hash-table-alist
+       (decode (encode (son "a binary"
+                            (make-instance 'binary-data
+                                           :octets (coerce #(1 2 3 4 5 6 7 8 9 10) 'ub8-vector)
+                                           :subtype :md5))
+                       :vector)))
+    (ensure-same "a binary" name)
+    (ensure-same :md5
+                 (binary-data-subtype obj))
+    (ensure-same '(1 2 3 4 5 6 7 8 9 10)
+                 (coerce (binary-data-octets obj) 'list))))
+
+(addtest (mongo-bson-test)
+  encode-the-decode-13
+  (ensure-same '(("foo" . +min-key+))
+               (hash-table-alist (decode (encode (son "foo" +min-key+) :vector)))))
+
+(addtest (mongo-bson-test)
+  encode-the-decode-14
+  (ensure-same '(("foo" . +max-key+))
+               (hash-table-alist (decode (encode (son "foo" +max-key+) :vector)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; errors
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(addtest (mongo-bson-test)
+  type-error
+  (ensure-condition type-error
+    (encode 100 :list))
+  (ensure-condition type-error
+    (encode "hello" :vector))
+  (ensure-condition type-error
+    (encode nil :vector))
+  (ensure-condition type-error
+    (encode #() :vector))
+
+  (ensure (encode (son "x" 9223372036854775807) :vector))
+  (ensure-condition type-error
+    (encode (son "x" 9223372036854775808) :vector))
+
+  (ensure (encode (son "x" -9223372036854775808) :vector))
+  (ensure-condition type-error
+    (encode (son "x" -9223372036854775809) :vector))
+
+  (ensure-condition type-error
+    (encode (son 8.9 "test") :vector)))
+
+

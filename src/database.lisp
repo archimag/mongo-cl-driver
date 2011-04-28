@@ -7,10 +7,6 @@
 
 (in-package #:mongo-cl-driver)
 
-(defmacro with-alist-converter (&body body)
-  `(let ((mongo-cl-driver.bson:*convert-bson-document-to-lisp* #'mongo-cl-driver.bson:decode-document-to-alist))
-     ,@body))
-
 (defgeneric connection (obj)
   (:documentation "Get connection associated with OBJ"))
 

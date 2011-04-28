@@ -74,14 +74,14 @@
   encode-op-update-3
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 1 target)                          ;; requestId
-    (encode-int32 10 target)                         ;; responseTo
-    (encode-int32 2001 target)                       ;; opcode
-    (encode-int32 0 target)                          ;; zero
-    (encode-cstring "db.system.index" target)        ;; fullConnectionName
-    (encode-int32 3 target)                          ;; flags
+    (encode-int32 1 target)                        ;; requestId
+    (encode-int32 10 target)                       ;; responseTo
+    (encode-int32 2001 target)                     ;; opcode
+    (encode-int32 0 target)                        ;; zero
+    (encode-cstring "db.system.index" target)      ;; fullConnectionName
+    (encode-int32 3 target)                        ;; flags
     (encode-document (son "x" (son "y" 2)) target) ;; selector
-    (encode-document (son "x" #(3 4 5)) target)      ;; update
+    (encode-document (son "x" #(3 4 5)) target)    ;; update
 
     (ensure-same (add-length-and-convert-to-list target)
                  (encode-protocol-message (make-instance 'op-update
@@ -102,11 +102,11 @@
   encode-op-insert-1
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2002 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-cstring "db.test" target)    ;; fullConnectionName
+    (encode-int32 0 target)           ;; requestId
+    (encode-int32 0 target)           ;; responseTo
+    (encode-int32 2002 target)        ;; opcode
+    (encode-int32 0 target)           ;; zero
+    (encode-cstring "db.test" target) ;; fullConnectionName
     ;; documents
     (encode-document (son "x" 2) target) 
 
@@ -120,11 +120,11 @@
   encode-op-insert-2
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 8 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2002 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-cstring "db.test" target)    ;; fullConnectionName
+    (encode-int32 8 target)           ;; requestId
+    (encode-int32 0 target)           ;; responseTo
+    (encode-int32 2002 target)        ;; opcode
+    (encode-int32 0 target)           ;; zero
+    (encode-cstring "db.test" target) ;; fullConnectionName
     ;; documents
     (encode-document (son "x" 2) target)
     (encode-document (son "date" (local-time:encode-timestamp 0 0 10 23 27 4 2011)) target)
@@ -151,7 +151,7 @@
     (encode-int32 0 target)              ;; requestId
     (encode-int32 0 target)              ;; responseTo
     (encode-int32 2004 target)           ;; opcode
-    (encode-int32 0 target)              ;; flags
+    (encode-int32 162 target)            ;; flags
     (encode-cstring "db.test" target)    ;; fullConnectionName
     (encode-int32 0 target)              ;; numberToSkip
     (encode-int32 0 target)              ;; numberToReturn
@@ -161,7 +161,10 @@
     (ensure-same (add-length-and-convert-to-list target)
                  (encode-protocol-message (make-instance 'op-query
                                                          :full-collection-name "db.test"
-                                                         :query (son "x" 2))
+                                                         :query (son "x" 2)
+                                                         :tailable-cursor t
+                                                         :await-data t
+                                                         :partial t)
                                           :list))))
 
 (addtest (mongo-wire-test)
@@ -171,7 +174,7 @@
     (encode-int32 0 target)              ;; requestId
     (encode-int32 0 target)              ;; responseTo
     (encode-int32 2004 target)           ;; opcode
-    (encode-int32 0 target)              ;; flags
+    (encode-int32 84 target)             ;; flags
     (encode-cstring "db.test" target)    ;; fullConnectionName
     (encode-int32 0 target)              ;; numberToSkip
     (encode-int32 0 target)              ;; numberToReturn
@@ -183,7 +186,10 @@
                  (encode-protocol-message (make-instance 'op-query
                                                          :full-collection-name "db.test"
                                                          :query (son "x" 2)
-                                                         :return-field-selector (son "title" 1))
+                                                         :return-field-selector (son "title" 1)
+                                                         :slave-ok t
+                                                         :no-cursor-timeout t
+                                                         :exhaust t)
                                           :list))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -194,13 +200,13 @@
   encode-op-getmore-1
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2005 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-cstring "db.test" target)    ;; fullConnectionName
-    (encode-int32 20 target)             ;; numberToReturn
-    (encode-int64 123 target)            ;; cursorID
+    (encode-int32 0 target)           ;; requestId
+    (encode-int32 0 target)           ;; responseTo
+    (encode-int32 2005 target)        ;; opcode
+    (encode-int32 0 target)           ;; zero
+    (encode-cstring "db.test" target) ;; fullConnectionName
+    (encode-int32 20 target)          ;; numberToReturn
+    (encode-int64 123 target)         ;; cursorID
 
     (ensure-same (add-length-and-convert-to-list target)
                  (encode-protocol-message (make-instance 'op-getmore
@@ -217,13 +223,13 @@
   encode-op-delete-1
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2006 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-cstring "db.test" target)    ;; fullConnectionName
-    (encode-int32 0 target)              ;; flags
-    (encode-document (son "foo" "bar")   ;; selector
+    (encode-int32 0 target)            ;; requestId
+    (encode-int32 0 target)            ;; responseTo
+    (encode-int32 2006 target)         ;; opcode
+    (encode-int32 0 target)            ;; zero
+    (encode-cstring "db.test" target)  ;; fullConnectionName
+    (encode-int32 0 target)            ;; flags
+    (encode-document (son "foo" "bar") ;; selector
                      target)
 
     (ensure-same (add-length-and-convert-to-list target)
@@ -236,13 +242,13 @@
   encode-op-delete-2
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2006 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-cstring "db.test" target)    ;; fullConnectionName
-    (encode-int32 1 target)              ;; flags
-    (encode-document (son "foo" "bar")   ;; selector
+    (encode-int32 0 target)            ;; requestId
+    (encode-int32 0 target)            ;; responseTo
+    (encode-int32 2006 target)         ;; opcode
+    (encode-int32 0 target)            ;; zero
+    (encode-cstring "db.test" target)  ;; fullConnectionName
+    (encode-int32 1 target)            ;; flags
+    (encode-document (son "foo" "bar") ;; selector
                      target)
 
     (ensure-same (add-length-and-convert-to-list target)
@@ -260,11 +266,11 @@
   encode-op-kill-cursor-1
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2007 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-int32 1 target)              ;; numberOfCursorIDs
+    (encode-int32 0 target)    ;; requestId
+    (encode-int32 0 target)    ;; responseTo
+    (encode-int32 2007 target) ;; opcode
+    (encode-int32 0 target)    ;; zero
+    (encode-int32 1 target)    ;; numberOfCursorIDs
     ;; sequence of cursorIDs to close
     (encode-int64 123 target) 
 
@@ -277,11 +283,11 @@
   encode-op-kill-cursor-1
   (let ((target (make-vector-target))
         (*encoded-bytes-count* 0))
-    (encode-int32 0 target)              ;; requestId
-    (encode-int32 0 target)              ;; responseTo
-    (encode-int32 2007 target)           ;; opcode
-    (encode-int32 0 target)              ;; zero
-    (encode-int32 3 target)              ;; numberOfCursorIDs
+    (encode-int32 0 target)    ;; requestId
+    (encode-int32 0 target)    ;; responseTo
+    (encode-int32 2007 target) ;; opcode
+    (encode-int32 0 target)    ;; zero
+    (encode-int32 3 target)    ;; numberOfCursorIDs
     ;; sequence of cursorIDs to close
     (encode-int64 123 target) 
     (encode-int64 256 target)
@@ -291,3 +297,28 @@
                  (encode-protocol-message (make-instance 'op-kill-cursors
                                                          :cursor-ids '(123 256 2561231))
                                           :list))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; decode op-reply
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(addtest (mongo-wire-test)
+  decode-op-reply-1
+  (let ((target (make-vector-target))
+        (*encoded-bytes-count* 0)
+        (*decoded-bytes-count* 0))
+    (encode-int32 0 target)   ;; requestId
+    (encode-int32 0 target)   ;; responseTo
+    (encode-int32 1 target)   ;; opcode
+    (encode-int32 0 target)   ;; responseFlags
+    (encode-int64 456 target) ;; cursorID
+    (encode-int32 7 target)   ;; startingFrom
+    (encode-int32  1 target)  ;; numberReturned
+    ;; documents
+    (encode-document (son "foo" "bar") target)
+
+    (let ((reply (decode-op-reply (coerce (add-length-and-convert-to-list target) 'vector))))
+      (ensure-same 456 (op-reply-cursor-id reply))
+      (ensure-same 7 (op-reply-starting-from reply))
+      (ensure-same 1 (op-reply-number-returned reply))
+      (ensure-same "bar" (gethash "foo" (car (op-reply-documents reply)))))))
+

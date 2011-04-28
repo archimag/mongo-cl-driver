@@ -13,10 +13,7 @@
   (let ((son (make-hash-table :test 'equal)))
     (iter (for item on args by #'cddr)
           (for key = (first item))
-          (setf (gethash (if (symbolp key)
-                             (camel-case:lisp-to-camel-case (symbol-name (first item)))
-                             key)
-                         son)
+          (setf (gethash key son)
                 (second item)))
     son))
 

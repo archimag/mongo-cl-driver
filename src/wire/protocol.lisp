@@ -153,7 +153,6 @@
 
 (define-protocol-message op-query +op-query+
   (flags
-   :initarg :flags
    :initform 0
    :bson-type :int32)
   (full-collection-name
@@ -173,8 +172,24 @@
    :bson-type :document)
   (return-field-selector
    :initarg :return-field-selector
-   :initform nil
+   :initform (make-hash-table :test 'equal)
    :bson-type :document))
+
+(defmethod shared-initialize :after ((query op-query) slot-names &key
+                                     tailable-cursor slave-ok no-cursor-timeout
+                                     await-data exhaust partial)
+  (let ((bits nil))
+    (when tailable-cursor (push 1 bits))
+    (when slave-ok (push 2 bits))
+    (when no-cursor-timeout (push 4 bits))
+    (when await-data (push 5 bits))
+    (when exhaust (push 6 bits))
+    (when partial (push 7 bits))
+
+    (dolist (bit bits)
+      (setf (ldb (byte 1 bit)
+                 (slot-value query 'flags))
+            1))))
 
 (define-protocol-message op-getmore +op-get-more+
   (zero
@@ -246,7 +261,16 @@
    :initform nil
    :bson-type :document
    :list-p t))
+
+(defmacro define-reply-flag-predicate (name bitnum)
+  `(defun ,name (reply)
+     (= (ldb (byte 1 ,bitnum)
+             (op-reply-response-flags reply))
+        1)))
                   
+(define-reply-flag-predicate cursor-not-found-p 0)
+(define-reply-flag-predicate query-failure-p 1)
+(define-reply-flag-predicate await-capable-p 3)
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; encode protocol message

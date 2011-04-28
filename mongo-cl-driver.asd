@@ -6,27 +6,31 @@
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
 (defsystem #:mongo-cl-driver
-    :depends-on (#:iterate #:babel #:ieee-floats #:camel-case #:closer-mop #:iolib.sockets
-                 #:bordeaux-threads #:local-time #:ironclad)
+    :depends-on (#:iterate #:closer-mop #:local-time
+                 #:babel #:ieee-floats #:ironclad
+                 #:bordeaux-threads #:iolib.sockets)
+    :pathname "src/"
+    :serial t
     :components
-    ((:module "src"
-              :components
-              ((:file "packages")
-               (:module "bson"
-                        :components
-                        ((:file "types")
-                         (:file "bson" :depends-on ("types")))
-                        :depends-on ("packages"))
-               (:module "wire"
-                        :components
-                        ((:file "protocol")
-                         (:file "bucket-brigade")
-                         (:file "connection" :depends-on ("protocol" "bucket-brigade")))
-                        :depends-on ("bson"))
-               (:file "database" :depends-on ("wire"))
-               (:file "cursor" :depends-on ("wire"))
-               (:file "collection" :depends-on ("cursor"))
-               (:file "son-sugar" :depends-on ("packages"))))))
+    ((:module "bson"
+              :pathname "bson/"
+              :serial t
+              :components ((:file "package")
+                           (:file "types")
+                           (:file "bson")))
+     (:module "wire"
+              :pathname "wire/"
+              :serial t
+              :components ((:file "package")
+                           (:file "protocol")
+                           (:file "bucket-brigade")
+                           (:file "connection"))
+              :depends-on ("bson"))
+     (:file "packages"  :depends-on ("wire"))
+     (:file "database" :depends-on ("packages"))
+     (:file "cursor" :depends-on ("packages"))
+     (:file "collection" :depends-on ("cursor"))
+     (:file "son-sugar" :depends-on ("packages"))))
 
 (defsystem #:mongo-cl-driver-test
   :depends-on (#:mongo-cl-driver #:lift)
