@@ -33,7 +33,8 @@
   :components ((:module "t"
                         :components
                         ((:file "suite")
-                         (:file "bson" :depends-on ("suite"))))))
+                         (:file "bson" :depends-on ("suite"))
+                         (:file "wire" :depends-on ("suite"))))))
 
 (defmethod perform ((o test-op) (c (eql (find-system '#:mongo-cl-driver))))
   (operate 'load-op '#:mongo-cl-driver)

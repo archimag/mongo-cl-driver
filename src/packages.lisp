@@ -59,6 +59,7 @@
            #:op-getmore
            #:op-delete
            #:op-kill-cursors
+           #:encode-protocol-message
 
            #:op-reply
            #:op-reply-response-flags
