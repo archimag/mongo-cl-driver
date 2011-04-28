@@ -17,7 +17,8 @@
               :serial t
               :components ((:file "package")
                            (:file "types")
-                           (:file "bson")))
+                           (:file "encode")
+                           (:file "decode")))
      (:module "wire"
               :pathname "wire/"
               :serial t

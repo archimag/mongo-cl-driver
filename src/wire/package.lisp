@@ -37,4 +37,5 @@
            #:op-reply-documents
            #:cursor-not-found-p
            #:query-failure-p
-           #:await-capable-p))
+           #:await-capable-p
+           #:check-reply))

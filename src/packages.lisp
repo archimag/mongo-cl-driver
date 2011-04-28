@@ -5,11 +5,19 @@
 ;;;;
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
+(defpackage #:mongo-cl-driver.son-sugar
+  (:nicknames #:son-sugar)
+  (:use #:cl #:iter)
+  (:export #:son
+           #:use-son-printer
+           #:with-son-printer
+           #:print-son))
+
 (defpackage #:mongo-cl-driver
   (:nicknames #:mongo)
   (:use #:cl
         #:iter #:alexandria
-        #:mongo-cl-driver.wire)
+        #:mongo-cl-driver.wire #:mongo-cl-driver.son-sugar)
   (:import-from #:mongo-cl-driver.bson #:object-id)
   (:export #:connection
 
@@ -61,14 +69,6 @@
            #:docursor
            #:close-cursor))
 
-(defpackage #:mongo-cl-driver.son-sugar
-  (:nicknames #:son-sugar)
-  (:use #:cl #:iter)
-  (:export #:son
-           #:use-son-printer
-           #:with-son-printer
-           #:print-son))
-  
 (defpackage #:mongo-cl-driver-user
   (:nicknames #:mongo-user)
   (:use #:cl #:iter

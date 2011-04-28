@@ -91,7 +91,9 @@
                                                   :query query
                                                   :return-field-selector fields))))
     (unwind-protect
-         (op-reply-documents reply)
+         (progn
+           (check-reply reply)
+           (op-reply-documents reply))
       (send-message-sync (connection collection)
                          (make-instance 'op-kill-cursors
                                         :cursor-ids (list (op-reply-cursor-id reply)))))))

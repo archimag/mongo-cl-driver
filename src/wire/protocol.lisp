@@ -172,12 +172,15 @@
    :bson-type :document)
   (return-field-selector
    :initarg :return-field-selector
-   :initform (make-hash-table :test 'equal)
+   :initform nil
    :bson-type :document))
 
 (defmethod shared-initialize :after ((query op-query) slot-names &key
                                      tailable-cursor slave-ok no-cursor-timeout
                                      await-data exhaust partial)
+  (unless (slot-value query 'return-field-selector)
+    (setf (slot-value query 'return-field-selector)
+          (make-hash-table :test 'equal)))
   (let ((bits nil))
     (when tailable-cursor (push 1 bits))
     (when slave-ok (push 2 bits))
@@ -271,6 +274,13 @@
 (define-reply-flag-predicate cursor-not-found-p 0)
 (define-reply-flag-predicate query-failure-p 1)
 (define-reply-flag-predicate await-capable-p 3)
+
+(defun check-reply (reply)
+  (when (cursor-not-found-p reply)
+    (error "Cursor '~A' not found" (op-reply-cursor-id reply)))
+  (when (query-failure-p reply)
+    (error (gethash "$err" (car (op-reply-documents reply)))))
+  reply)
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; encode protocol message

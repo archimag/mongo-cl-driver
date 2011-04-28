@@ -12,13 +12,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defvar *encoded-bytes-count*)
-(defvar *decoded-bytes-count*)
 
 (defgeneric encode-byte (byte target)
   (:documentation "Encode BYTE to TARGET"))
-
-(defgeneric decode-byte (source)
-  (:documentation "Decode byte from SOURCE"))
 
 (defmacro with-count-encoded-bytes (&body body)
   (let ((encode-bytes-count (gensym)))
@@ -32,69 +28,34 @@
 (defmethod bson-target-replace ((target vector) sequence start)
   (replace target sequence :start1 start))
 
-
 (defmethod encode-byte :around (byte target)
   (check-type byte (unsigned-byte 8))
   (call-next-method)
   (incf *encoded-bytes-count*))
 
 (defmethod encode-byte (byte (target vector))
-  (check-type target (and (vector (unsigned-byte 8)) (not simple-array)))
   (vector-push-extend byte target))
 
-(defmethod decode-byte :after (source)
-  (incf *decoded-bytes-count*))
-
-(defmethod decode-byte ((source stream))
-  (read-byte source))
-
-(defmethod decode-byte ((source vector))
-  (aref source *decoded-bytes-count*))
-  
 (defun encode-int32 (i32 target)
   "Encode 32-bit integer to TARGET"
   (iter (for i from 0 below 32 by 8)
         (encode-byte (ldb (byte 8 i) i32)
                      target)))
 
-(defun decode-int32 (source)
-  "Decode 32-bit signed integer from SOURCE"
-  (let ((ui32 0))
-    (iter (for i from 0 below 32 by 8)
-          (setf (ldb (byte 8 i) ui32)
-                (decode-byte source)))
-    (if (logbitp 31 ui32)
-        (1- (- (logandc2 #xFFFFFFFF ui32)))
-        ui32)))
-
 (defun encode-int64 (i64 target)
   "Encode 64-bit integer to TARGET"
   (iter (for i from 0 below 64 by 8)
         (encode-byte (ldb (byte 8 i) i64) target)))
-
-(defun decode-int64 (source)
-  "Decode 64-bit signed integer from SOURCE"
-  (let ((ui64 0))
-    (iter (for i from 0 below 64 by 8)
-          (setf (ldb (byte 8 i) ui64)
-                (decode-byte source)))
-    (if (logbitp 63 ui64)
-        (1- (- (logandc2 #xFFFFFFFFFFFFFFFF ui64)))
-        ui64)))
 
 (defun encode-double (double target)
   "Encode 64-bit IEEE 754 floating point to TARGE"
   (encode-int64 (ieee-floats:encode-float64 double)
                 target))
 
-(defun decode-double (source)
-  "Decode 64-bit IEEE 754 floating point from SOURCE"
-  (ieee-floats:decode-float64 (decode-int64 source)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Non-terminals
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
+
 (defun encode-string (string target)
   "Encode BSTR-style string"
   (let ((octets (babel:string-to-octets string :encoding :utf-8)))
@@ -103,18 +64,6 @@
           (encode-byte octet target))
     (encode-byte #x00 target)))
 
-(defun decode-string (source)
-  "Decode BSTR-style string"
-  (let* ((count (1- (decode-int32 source)))
-         (octets (make-array count :element-type '(unsigned-byte 8))))
-    (iter (for i from 0 below count)
-          (for byte = (decode-byte source))
-          (setf (aref octets i)
-                byte))
-    (unless (= (decode-byte source) #x00)
-      (error "Bad format: not #x00 byte in end string"))
-    (babel:octets-to-string octets :encoding :utf-8)))
-
 (defun encode-cstring (string target)
   "Encode C-style string"
   (let ((octets (babel:string-to-octets string :encoding :utf-8)))
@@ -122,45 +71,12 @@
           (encode-byte octet target))
     (encode-byte #x00 target)))
 
-(defun decode-cstring (source)
-  "Decode C-style string"
-  (let ((octets (make-array 0
-                            :element-type '(unsigned-byte 8)
-                            :fill-pointer 0
-                            :adjustable t)))
-    (iter (for octet = (decode-byte source))
-          (while (not (= octet 0)))
-          (vector-push-extend octet octets))
-    (babel:octets-to-string octets :encoding :utf-8)))
-
 (defun encode-ename (name target)
   (encode-cstring name target))
-
-(defun decode-ename (source)
-  (decode-cstring source))
 
 (defun encode-boolean (flag target)
   (encode-byte (if flag #x01 #x00)
                target))
-
-(defun decode-boolean (source &aux (byte (decode-byte source)))
-  (values (case byte
-            (#x01 t)
-            (#x00 nil)
-            (otherwise (error "Bad format: ~A is not boolean byte" byte)))))
-
-(defun encode-object-id (id target)
-  (iter (for byte in-vector (slot-value id 'raw))
-        (encode-byte byte target)))
-
-(defun decode-object-id (source)
-  (declare (optimize (debug 3)))
-  (let* ((id (make-instance 'object-id))
-         (raw (slot-value id 'raw)))
-    (iter (for i from 0 below 12)
-          (setf (aref raw i)
-                (decode-byte source)))
-    id))
 
 (defun encode-array (array target
                      &aux (index *encoded-bytes-count*))
@@ -180,30 +96,13 @@
     (encode-int32 count arr)
     (bson-target-replace target arr index)))
 
-(defun decode-array (source)
-  (declare (optimize (debug 3)))
-  (let ((end (+ *decoded-bytes-count*
-                 (decode-int32 source)
-                 -1)))
-    (prog1 
-        (iter (for i from 0)
-              (while (< *decoded-bytes-count* end))
-              (let ((key-value (decode-element source)))
-                (unless (= i (if (stringp (car key-value))
-                                 (parse-integer (car key-value))
-                                 (car key-value)))
-                  (error "Bad format: ~A is not equal ~A" (car key-value) i))
-                (collect (cdr key-value))))
-      (unless (= end *decoded-bytes-count*)
-        (error "Bad format"))
-      (decode-byte source))))
+(defun encode-object-id (id target)
+  (iter (for byte in-vector (slot-value id 'raw))
+        (encode-byte byte target)))
 
 (defun encode-utc-datetime (timestamp target)
   (encode-int64 (* (local-time:timestamp-to-unix timestamp) 1000)
                 target))
-
-(defun decode-utc-dateime (source)
-  (local-time:unix-to-timestamp (floor (decode-int64 source) 1000)))
 
 (defun encode-binary-data (binary target)
   (encode-int32 (length (binary-data-octets binary)) target)
@@ -217,30 +116,9 @@
   (iter (for byte in-vector (binary-data-octets binary))
         (encode-byte byte target)))
 
-(defun decode-binary-data (source)
-  (let* ((size (decode-int32 source))
-         (subtype (decode-byte source))
-         (data (make-array size :element-type 'ub8)))
-    (dotimes (i size)
-      (setf (aref data i)
-            (decode-byte source)))
-    (make-instance 'binary-data
-                   :subtype (case subtype
-                              ((#x00 #x02) :generic)
-                              (#x01        :function)
-                              (#x03        :uuid)
-                              (#x05        :md5)
-                              (#x80        :user-defined))
-                   :octets data)))
-    
 (defun encode-regex (regex target)
   (encode-cstring (regex-pattern regex) target)
   (encode-cstring (regex-options regex) target))
-
-(defun decode-regex (source)
-  (make-instance 'regex
-                 :pattern (decode-cstring source)
-                 :options (decode-cstring source)))
 
 (defun encode-javascript (js target &aux (index *encoded-bytes-count*))
   (let ((count (prog1 (with-count-encoded-bytes
@@ -253,31 +131,9 @@
     (encode-int32 count arr)
     (bson-target-replace target arr index)))
 
-(defun decode-javascript (source)
-  (let ((end (+ *decoded-bytes-count* (decode-int32 source)))
-        (code (decode-string source)))
-    (unless (= end *decoded-bytes-count*)
-      (error "Bad format"))
-    (make-instance 'javascript
-                   :code code)))
-
-(defun decode-javascript-w-scope (source)
-  (let ((end (+ *decoded-bytes-count* (decode-int32 source)))
-        (code (decode-string source))
-        (scope (decode-document source)))
-    (unless (= end *decoded-bytes-count*)
-      (error "Bad format"))
-    (make-instance 'javascript
-                   :code code
-                   :scope scope)))        
-
 (defun encode-mongo-timestamp (timestamp target)
   (encode-int64 (mongo-timestamp-value timestamp)
                 target))
-
-(defun decode-mongo-timestamp (source)
-  (make-instance 'mongo-timestamp
-                 :value (decode-int64 source)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Document
@@ -332,15 +188,15 @@
   (encode-ename key target)
   (encode-array value target))
 
-(defmethod encode-element (key (value hash-table) target)
-  (encode-byte #x03 target)
-  (encode-ename key target)
-  (encode-document value target))
-
 (defmethod encode-element (key (value list) target)
   (encode-byte #x04 target)
   (encode-ename key target)
   (encode-array value target))
+
+(defmethod encode-element (key (value hash-table) target)
+  (encode-byte #x03 target)
+  (encode-ename key target)
+  (encode-document value target))
 
 (defmethod encode-element (key (value object-id) target)
   (encode-byte #x07 target)
@@ -372,48 +228,11 @@
   (encode-ename key target)
   (encode-mongo-timestamp value target))
 
-(defun decode-element (source)
-  (declare (optimize (debug 3)))
-  (flet ((constant-decoder (val)
-           (lambda (src)
-             (declare (ignore src))
-             val))
-         (unimplemented-decoder (code)
-           (lambda (src)
-             (declare (ignore src))
-             (error "Decoder for code '#x~2,'0X' unimplemented" code))))
-    (let* ((code (decode-byte source))
-           (decoder (case code
-                      (#x01 #'decode-double)
-                      (#x02 #'decode-string)
-                      (#x03 #'decode-document)
-                      (#x04 #'decode-array)
-                      (#x05 #'decode-binary-data)
-                      (#x06 (constant-decoder :undefined))
-                      (#x07 #'decode-object-id)
-                      (#x08 #'decode-boolean)
-                      (#x09 #'decode-utc-dateime)
-                      (#x0A (constant-decoder nil))
-                      (#x0B #'decode-regex)
-                      (#x0C (unimplemented-decoder #x0C))
-                      (#x0D #'decode-javascript)
-                      (#x0E (unimplemented-decoder #x0E))
-                      (#x0F #'decode-javascript-w-scope)
-                      (#x10 #'decode-int32)
-                      (#x11 #'decode-mongo-timestamp)
-                      (#x12 #'decode-int64)
-                      (#xFF (constant-decoder +min-key+))
-                      (#x7F (constant-decoder +max-key+))
-                      (otherwise (unimplemented-decoder code)))))
-      (cons (decode-ename source)
-            (funcall decoder source)))))
-
-(defun encode-document (document target
-                        &aux (index *encoded-bytes-count*))
-   "Encode DOCUMENT as BSON to target"
-   (declare (optimize (debug 3)))
-   (check-type document hash-table)
-   (let ((count (prog1 (with-count-encoded-bytes
+(defun encode-document (document target)
+  "Encode DOCUMENT as BSON to target"
+  (check-type document hash-table)
+  (let* ((index *encoded-bytes-count*)
+         (count (prog1 (with-count-encoded-bytes
                          (dotimes (i 4)
                            (encode-byte 0 target))
                          (iter (for (key value) in-hashtable document)
@@ -421,26 +240,11 @@
                          (encode-byte #x00 target))))
          (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0))
          (*encoded-bytes-count* 0))
-     (encode-int32 count arr)
-     (bson-target-replace target arr index)))
+    (encode-int32 count arr)
+    (bson-target-replace target arr index)))
 
-(defun decode-document (source)
-  "Decode BSON document from SOURCE"
-  (let ((end (+ *decoded-bytes-count* (decode-int32 source) -1))
-        (son (make-hash-table :test 'equal)))
-    (iter (while (< *decoded-bytes-count* end))
-          (for (key . value) = (decode-element source))
-          (setf (gethash key son)
-                value))
-    (unless (= end *decoded-bytes-count*)
-      (error "Bad format"))
-    (unless (= (decode-byte source) #x00)
-      (error "Bad format"))
-    son))
-
-    
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; main interface
+;;;; encode
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defgeneric encode (obj target)
@@ -451,28 +255,10 @@
     (encode-document obj target)))
 
 (defmethod encode (obj (target (eql :vector)))
-  (let ((vector (make-array 0
-                            :element-type '(unsigned-byte 8)
-                            :fill-pointer 0
-                            :adjustable t)))
+  (let ((vector (make-array 0 :element-type 'ub8 :fill-pointer 0 :adjustable t)))
     (encode obj vector)
     vector))
 
 (defmethod encode (obj (target (eql :list)))
   (coerce (encode obj :vector)
           'list))
-
-(defmethod encode (obj (target (eql :debug-string)))
-  (with-output-to-string (out)
-    (iter (for byte in-vector (encode obj :vector))
-          (format out "\\x~2,'0X" byte))))
-  
-(defgeneric decode (source)
-  (:documentation "Decode BSON object from SOURCE"))
-
-(defmethod decode :around (source)
-  (let ((*decoded-bytes-count* 0))
-    (call-next-method)))
-
-(defmethod decode (source)
-  (decode-document source))

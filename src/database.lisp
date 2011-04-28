@@ -51,13 +51,18 @@
 
 (defun run-command (db cmd)
   (if (stringp cmd)
-      (run-command db `((,cmd . 1)))
-      (first (op-reply-documents
-              (send-and-read-sync (connection db)
-                                  (make-instance 'op-query
-                                                 :number-to-return 1
-                                                 :full-collection-name (format nil "~A.$cmd" (database-name db))
-                                                 :query cmd))))))
+      (run-command db (son cmd 1))
+      (let* ((reply (send-and-read-sync
+                     (connection db)
+                     (make-instance 'op-query
+                                    :number-to-return 1
+                                    :full-collection-name (format nil "~A.$cmd" (database-name db))
+                                    :query cmd)))
+             (result (first (op-reply-documents reply))))
+        (check-reply reply)
+        (when (gethash "errmsg" result)
+          (error (gethash "errmsg" result)))
+        result)))
              
 (defun db-stats (db)
   (run-command db "dbStats"))
