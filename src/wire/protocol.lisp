@@ -300,6 +300,10 @@
   (coerce  (encode-protocol-message message :vector)
            'list))
 
+(defmethod encode-protocol-message (message (target (eql :brigade)))
+  (encode-protocol-message message
+                           (make-instance 'brigade)))
+
 (defmethod encode-protocol-message :around (message target)
   (let ((*encoded-bytes-count* 0))
     (call-next-method)))

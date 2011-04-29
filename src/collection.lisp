@@ -65,9 +65,11 @@
                                       :number-to-return 1
                                       :full-collection-name (fullname collection)
                                       :query query)
-                       #'(lambda (obj)
+                       (named-lambda find-one-async-lambda (err reply)
                            (funcall callback
-                                    (first (op-reply-documents obj))))))
+                                    err
+                                    (if (not err)
+                                        (first (op-reply-documents reply)))))))
                        
   
 
@@ -97,15 +99,33 @@
       (send-message-sync (connection collection)
                          (make-instance 'op-kill-cursors
                                         :cursor-ids (list (op-reply-cursor-id reply)))))))
-    
+
+(defun find-list-async (collection callback &key query fields (limit 0) (skip 0))
+  (send-and-read-async (connection collection)
+                       (make-instance 'op-query
+                                      :full-collection-name (fullname collection)
+                                      :number-to-return limit
+                                      :number-to-skip skip
+                                      :query query
+                                      :return-field-selector fields)
+                       (named-lambda find-list-async (err reply)
+                         (cond
+                           (err (funcall callback err nil))
+                           (t (handler-case
+                                  (check-reply reply)
+                                (error (condition) (funcall callback condition nil)))
+                              (funcall callback nil (op-reply-documents reply)))))))
+                           
+
 (defun find-cursor-async (collection query fields callback)
   (send-and-read-async (connection collection)
                        (make-instance 'op-query
                                       :full-collection-name (fullname collection)
                                       :query query
                                       :return-field-selector fields)
-                       #'(lambda (reply)
+                       (named-lambda find-cursor-async-lambda (err reply)
                            (funcall callback
+                                    err
                                     (make-instance 'cursor
                                                    :id (op-reply-cursor-id reply)
                                                    :collection collection

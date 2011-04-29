@@ -23,8 +23,8 @@
               :pathname "wire/"
               :serial t
               :components ((:file "package")
-                           (:file "protocol")
                            (:file "bucket-brigade")
+                           (:file "protocol")
                            (:file "connection"))
               :depends-on ("bson"))
      (:file "packages"  :depends-on ("wire"))

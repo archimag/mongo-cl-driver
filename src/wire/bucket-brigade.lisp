@@ -7,80 +7,155 @@
 
 (in-package #:mongo-cl-driver.wire)
 
-(defconstant +bucket-size+ 4096)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; bucket pool
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defparameter *bucket-lock* (bordeaux-threads:make-lock "Bucket Lock"))
+(deftype bucket (size)
+  `(simple-array (ub8) (,size)))
 
-(defvar *bucket-pool* nil)
+(defgeneric push-bucket (bucket pool)
+  (:documentation "Push BUCKET to the POOL"))
+
+(defgeneric pop-bucket (pool)
+  (:documentation "Pop bucket from the POOL"))
+
+(defclass bucket-pool ()
+  ((buckets :initform nil)
+   (bucket-size :initform 4096 :initarg :bucket-size)))
+
+(declaim (inline bucket-pool-typespec))
+(defun bucket-pool-typespec (pool)
+  `(bucket ,(slot-value pool 'bucket-size)))
+;;  `(simple-array (ub8) (,(slot-value pool 'bucket-size))))
+
+(defmethod push-bucket (bucket (pool bucket-pool))
+  (let ((typespec (bucket-pool-typespec pool)))
+    (assert (typep bucket typespec) (bucket)
+            'type-error :datum bucket :expected-type typespec))
+  (push bucket
+        (slot-value pool 'buckets)))
+
+(defmethod pop-bucket ((pool bucket-pool))
+  (or (pop (slot-value pool 'buckets))
+      (make-array (slot-value pool 'bucket-size)
+                  :element-type 'ub8)))
+
+(defclass thread-safe-bucket-pool (bucket-pool)
+  ((look :initform (bordeaux-threads:make-lock "Bucket Lock"))))
+  
+(defmethod pop-bucket :around ((pool thread-safe-bucket-pool))
+  (bordeaux-threads:with-recursive-lock-held ((slot-value pool 'look))
+    (call-next-method)))
+
+(defmethod push-bucket :around (bucket (pool thread-safe-bucket-pool))
+  (bordeaux-threads:with-recursive-lock-held ((slot-value pool 'look))
+    (call-next-method)))
+
+(defvar *bucket-pool* (make-instance 'thread-safe-bucket-pool))
 
 (defun alloc-bucket ()
-  (or (bordeaux-threads:with-recursive-lock-held (*bucket-lock*)
-        (pop *bucket-pool*))
-      (make-array +bucket-size+ :element-type '(unsigned-byte 8))))
+  (pop-bucket *bucket-pool*))
 
 (defun free-bucket (bucket)
-  (check-type bucket (simple-array (unsigned-byte 8) (4096)))
-  (bordeaux-threads:with-recursive-lock-held (*bucket-lock*)
-    (push bucket *bucket-pool*)))
+  (push-bucket bucket *bucket-pool*))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; brigade
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defclass brigade ()
   ((buckets :initform (make-array 0 :fill-pointer 0 :adjustable t)
             :reader brigade-buckets)
+   (bucket-size :initform nil :reader brigade-bucket-size)
    (bucket-index :initform -1)
    (pos-in-bucket :initform 0)))
 
-(defmethod shared-initialize :after ((obj brigade) slot-names &key)
-  (brigade-extend obj))
-
-(defun brigade-total-size (brigade)
-  (+ (* (1- (length (brigade-buckets brigade))) +bucket-size+)
-     (slot-value brigade  'pos-in-bucket)))
+(defmethod shared-initialize :after ((brigade brigade) slot-names &key)
+  (setf (slot-value brigade 'bucket-size)
+        (slot-value *bucket-pool* 'bucket-size))
+  (brigade-extend brigade))
 
 (defun brigade-extend (brigade)
-  (vector-push-extend (alloc-bucket)
-                      (brigade-buckets brigade))
-  (incf (slot-value brigade 'bucket-index))
+  (let* ((bucket (alloc-bucket))
+         (typespec `(bucket ,(brigade-bucket-size brigade))))
+    (assert (typep bucket typespec) (bucket)
+            'type-error :datum bucket :expected-type typespec)
+    (vector-push-extend bucket
+                        (brigade-buckets brigade)))
+  (setf (slot-value brigade 'bucket-index)
+        (1- (length (brigade-buckets brigade))))
   (setf (slot-value brigade 'pos-in-bucket) 0))
 
-(defun brigade-free-buckets (brigade)
-  (iter (for bucket in-vector (brigade-buckets brigade))
-        (free-bucket bucket)))
+(defun brigade-shift (brigade count)
+  (incf (slot-value brigade 'pos-in-bucket) count)
+  (when (= (slot-value brigade 'pos-in-bucket)
+                          (length (active-bucket brigade)))
+    (brigade-extend brigade)))
+
+(defun active-bucket (brigade)
+  (values (aref (brigade-buckets brigade)
+                (slot-value brigade 'bucket-index))
+          (slot-value brigade 'pos-in-bucket)))
 
 (defun brigade-ref (brigade)
-  (aref (aref (brigade-buckets brigade)
-              (slot-value brigade 'bucket-index))
+  (aref (active-bucket brigade)
         (slot-value brigade 'pos-in-bucket)))
 
 (defun (setf brigade-ref) (newvalue brigade)
-  (check-type newvalue (unsigned-byte 8))
-  (setf (aref (aref (brigade-buckets brigade)
-                    (slot-value brigade 'bucket-index))
+  (check-type newvalue ub8)
+  (setf (aref (active-bucket brigade)
               (slot-value brigade 'pos-in-bucket))
         newvalue))
 
+(defun brigade-free-buckets (brigade)
+  (iter (for bucket in-vector (brigade-buckets brigade))
+        (free-bucket bucket))
+  (setf (slot-value brigade 'buckets) nil))
+
+(defun brigade-prepare-for-read (brigade)
+  (setf (slot-value brigade 'bucket-index) 0
+        (slot-value brigade 'pos-in-bucket) 0))
+
+
+(defun brigade-total-size (brigade)
+  (+ (* (brigade-bucket-size brigade)
+        (1- (length (brigade-buckets brigade))))
+     (slot-value brigade  'pos-in-bucket)))
+
+(defun find-bucket (brigade position)
+  (let ((size (brigade-bucket-size brigade)))
+    (multiple-value-bind (bucket-index bucket-start) (floor position size)
+      (values (aref (brigade-buckets brigade) bucket-index)
+              bucket-start
+              (if (= bucket-index (slot-value brigade 'bucket-index))
+                  (slot-value brigade 'pos-in-bucket)
+                  size)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; for support BSON encode/decode
+;;;; BSON encode/decode
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defmethod decode-byte ((brigade brigade))
-  (prog1
-      (brigade-ref brigade)
+  (let ((byte (brigade-ref brigade)))
     (incf (slot-value brigade 'pos-in-bucket))
-    (when (= (slot-value brigade 'pos-in-bucket) +bucket-size+)
+    (when (= (slot-value brigade 'pos-in-bucket)
+             (length (active-bucket brigade)))
       (incf (slot-value brigade 'bucket-index))
-      (setf (slot-value brigade 'pos-in-bucket) 0))))
+      (setf (slot-value brigade 'pos-in-bucket) 0))
+    byte))
 
 (defmethod encode-byte (byte (brigade brigade))
-  (setf (brigade-ref brigade)
-        byte)
+  (setf (brigade-ref brigade) byte)
   (incf (slot-value brigade 'pos-in-bucket))
-  (when (= (slot-value brigade 'pos-in-bucket) +bucket-size+)
+  (when (= (slot-value brigade 'pos-in-bucket)
+           (length (active-bucket brigade)))
     (brigade-extend brigade)))
 
 (defmethod bson-target-replace ((brigade brigade) sequence start)
   (iter (for i from start)
         (for j from 0 below (length sequence))
-        (multiple-value-bind (index pos) (floor i +bucket-size+)
+        (multiple-value-bind (index pos) (floor i (length (aref (brigade-buckets brigade) 0)))
           (setf (aref (aref (brigade-buckets brigade)
                             index)
                       pos)
