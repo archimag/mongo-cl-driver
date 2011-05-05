@@ -30,7 +30,7 @@
            #:regex
            #:regex-pattern
            #:regex-options
-           #:javascript-w-scope
+           #:javascript
            #:javascript-code
            #:javascript-scope
            #:mongo-timestamp
