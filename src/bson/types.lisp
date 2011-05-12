@@ -23,9 +23,51 @@
 (defclass object-id ()
   ((raw :initform (make-array 12 :element-type '(unsigned-byte 8)))))
 
-(defmethod shared-initialize :after ((id object-id) slot-names &key raw)
-  (when raw
-    (replace (slot-value id 'raw) raw)))
+(defvar *object-id-inc* 0)
+
+(defvar *object-id-inc-lock*
+  (bordeaux-threads:make-lock "ObjectId inc lock"))
+
+(defmethod shared-initialize :after ((id object-id) slot-names &key raw text)
+  (cond
+    (raw (assert (= (length raw) 12))
+         (replace (slot-value id 'raw)
+                  raw))
+    
+    (text (assert (= (length text) 12))
+          (replace (slot-value id 'raw)
+                   (map 'vector #'char-code text)))
+    
+    (t (generate-id (slot-value id 'raw)))))
+
+(defun generate-id (raw)
+  (let ((time (iolib.syscalls:time))
+        (hostname (ironclad:digest-sequence :md5 (babel:string-to-octets (iolib.syscalls:gethostname) :encoding :utf-8)))
+        (pid (iolib.syscalls:getpid))
+        (inc (bordeaux-threads:with-recursive-lock-held (*object-id-inc-lock*)
+               (setf *object-id-inc*
+                     (rem (1+ *object-id-inc*)
+                          #xFFFFFF)))))
+
+    ;; 4 byte current time
+    (setf (aref raw 0) (ldb (byte 8 0) time)
+          (aref raw 1) (ldb (byte 8 8) time)
+          (aref raw 2) (ldb (byte 8 16) time)
+          (aref raw 3) (ldb (byte 8 24) time))
+
+    ;; 3 bytes machine
+    (setf (aref raw 4) (aref hostname 0)
+          (aref raw 5) (aref hostname 1)
+          (aref raw 6) (aref hostname 2))
+          
+    ;; 2 bytes pid
+    (setf (aref raw 7) (ldb (byte 8 0) pid)
+          (aref raw 8) (ldb (byte 8 8) pid))
+
+    ;; 3 bytes inc
+    (setf (aref raw 9) (ldb (byte 8 0) inc)
+          (aref raw 10) (ldb (byte 8 8) inc)
+          (aref raw 11) (ldb (byte 8 16) inc))))
 
 (defmethod print-object ((id object-id) stream)
   (print-unreadable-object (id stream :type t :identity nil)
