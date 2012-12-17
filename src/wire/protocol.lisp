@@ -1,4 +1,4 @@
-;;;; wire.lisp
+;;;; protocol.lisp
 ;;;;
 ;;;; This file is part of the MONGO-CL-DRIVER library, released under Lisp-LGPL.
 ;;;; See file COPYING for details.
@@ -16,65 +16,6 @@
 (defconstant +op-get-more+ 2005 "Get more data from a query. See Cursors")
 (defconstant +op-delete+ 2006 "Delete documents")
 (defconstant +op-kill-cursors+ 2007 "Tell database client is done with a cursor")
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; message-class metaclass
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defclass message-class (standard-class)
-  ((slot-order :initform ()
-               :initarg :slot-order
-               :reader class-slot-order)))
-
-(defmethod compute-slots ((class message-class))
-  (let ((order (class-slot-order class)))
-    (sort (copy-list (call-next-method))
-          #'(lambda (a b)
-              (< (position (slot-definition-name a) order)
-                 (position (slot-definition-name b) order))))))
-                     
-(defmethod validate-superclass ((sub message-class) (super standard-class))
-  t)
-
-(defclass message-slot-definition (standard-direct-slot-definition)
-  ((bson-type :initarg :bson-type :reader message-slot-definition-bson-type)
-   (list-p :initarg :list-p :initform nil :reader message-slot-definition-list-p)))
-
-(defclass message-effective-slot-definition (standard-effective-slot-definition)
-  ((encoder :initform nil :initarg :encoder :reader message-effective-slot-encoder)
-   (decoder :initform nil :initarg :decoder :reader message-effective-slot-decoder)))
-
-(defmethod direct-slot-definition-class ((class message-class) &key)
-  'message-slot-definition)
-
-(defmethod effective-slot-definition-class ((class message-class) &rest initargs)
-  (declare (ignore initargs))
-  'message-effective-slot-definition)
-
-(defmethod compute-effective-slot-definition ((class message-class)  name direct-slots)
-  (let* ((normal-slot (call-next-method))
-         (direct-slot (find name
-                             direct-slots
-                             :key #'slot-definition-name))
-         (bson-type (message-slot-definition-bson-type direct-slot))
-         (list-p (message-slot-definition-list-p direct-slot))
-         (encoder (or (find-symbol (format nil "ENCODE-~A" bson-type)
-                           '#:mongo-cl-driver.bson)
-                      (error "Can not find a encoder for ~A type" bson-type)))
-         (decoder (or (find-symbol (format nil "DECODE-~A" bson-type)
-                           '#:mongo-cl-driver.bson)
-                      (error "Can not find a decoder for ~A type" bson-type))))
-    
-    (setf (slot-value normal-slot 'encoder)
-          (if list-p
-              #'(lambda (value target)
-                  (iter (for item in value)
-                        (funcall encoder item target)))
-              encoder))
-    (setf (slot-value normal-slot 'decoder)
-          decoder)
-    normal-slot))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Message Types
@@ -136,7 +77,7 @@
       (setf (ldb (byte 1 bit)
                  (slot-value msg 'flags))
             1))))
-          
+
 (define-protocol-message op-insert +op-insert+
   (zero
    :initform 0
@@ -270,7 +211,7 @@
      (= (ldb (byte 1 ,bitnum)
              (op-reply-response-flags reply))
         1)))
-                  
+
 (define-reply-flag-predicate cursor-not-found-p 0)
 (define-reply-flag-predicate query-failure-p 1)
 (define-reply-flag-predicate await-capable-p 3)
@@ -281,7 +222,7 @@
   (when (query-failure-p reply)
     (error (gethash "$err" (car (op-reply-documents reply)))))
   reply)
-  
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; encode protocol message
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -313,9 +254,12 @@
                 (dotimes (i 4)
                   (encode-byte 0 target))
                 (iter (for slot in (cdr (class-slots (class-of message))))
-                      (for value = (slot-value-using-class (class-of message)
-                                                           message
-                                                           slot))
+                      (for value = #-lispworks (slot-value-using-class (class-of message)
+                                                                       message
+                                                                       slot)
+                                   #+lispworks (slot-value-using-class (class-of message)
+                                                                       message
+                                                                       (slot-definition-name slot)))
                       (for encoder = (message-effective-slot-encoder slot))
                       (funcall encoder value target))))
         (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0)))
@@ -332,7 +276,8 @@
          (reply-class (class-of reply))
          (*decoded-bytes-count* 0))
     (iter (for slot in (butlast (class-slots reply-class)))
-          (setf (slot-value-using-class reply-class reply slot)
+          (setf #-lispworks (slot-value-using-class reply-class reply slot)
+                #+lispworks (slot-value-using-class reply-class reply (slot-definition-name slot))
                 (funcall (message-effective-slot-decoder slot)
                          source)))
     (iter (for i from 0 below (op-reply-number-returned reply))
@@ -341,5 +286,3 @@
     (setf (slot-value reply 'documents)
           (nreverse (slot-value reply 'documents)))
     reply))
-          
-          
