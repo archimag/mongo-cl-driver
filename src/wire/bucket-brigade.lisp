@@ -39,11 +39,12 @@
 (defmethod pop-bucket ((pool bucket-pool))
   (or (pop (slot-value pool 'buckets))
       (make-array (slot-value pool 'bucket-size)
-                  :element-type 'ub8)))
+                  :element-type 'ub8
+                  #+lispworks #+lispworks :allocation :static)))
 
 (defclass thread-safe-bucket-pool (bucket-pool)
   ((look :initform (bordeaux-threads:make-lock "Bucket Lock"))))
-  
+
 (defmethod pop-bucket :around ((pool thread-safe-bucket-pool))
   (bordeaux-threads:with-recursive-lock-held ((slot-value pool 'look))
     (call-next-method)))

@@ -24,6 +24,7 @@
               :serial t
               :components ((:file "package")
                            (:file "bucket-brigade")
+                           (:file "meta-protocol")
                            (:file "protocol")
                            (:file "connection"))
               :depends-on ("bson"))
@@ -44,4 +45,3 @@
 (defmethod perform ((o test-op) (c (eql (find-system '#:mongo-cl-driver))))
   (operate 'load-op '#:mongo-cl-driver)
   (operate 'test-op '#:mongo-cl-driver-test))
-
