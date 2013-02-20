@@ -43,6 +43,7 @@
            #:run-command
            #:last-error
            #:check-last-error
+           #:*auto-check-last-error*
            #:db-stats
            #:cursor-info
            #:authenticate

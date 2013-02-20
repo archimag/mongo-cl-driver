@@ -131,13 +131,19 @@
                                                    :collection collection
                                                    :documents (op-reply-documents reply))))))
 
+(defparameter *auto-check-last-error* t)
+
+(defun auto-check-last-error (collection)
+  (when *auto-check-last-error*
+    (check-last-error (collection-database collection))))
+
 (defun insert-op (collection &rest objects)
   (when objects
     (send-message-sync (connection collection)
                        (make-instance 'op-insert
                                       :full-collection-name (fullname collection)
                                       :documents objects))
-    (check-last-error (collection-database collection))))
+    (auto-check-last-error collection)))
 
 (defun update-op (collection selector update &key upsert multi-update)
   (send-message-sync (connection collection)
@@ -147,7 +153,7 @@
                                     :update update
                                     :upsert upsert
                                     :multi-update multi-update))
-  (check-last-error (collection-database collection)))
+  (auto-check-last-error collection))
 
 (defun delete-op (collection selector &key single-remove)
   (send-message-sync (connection collection)
@@ -155,4 +161,4 @@
                                     :full-collection-name (fullname collection)
                                     :selector selector
                                     :single-remove single-remove))
-  (check-last-error (collection-database collection)))
+  (auto-check-last-error collection))
