@@ -42,6 +42,7 @@
            #:with-database
            #:run-command
            #:last-error
+           #:check-last-error
            #:db-stats
            #:cursor-info
            #:authenticate

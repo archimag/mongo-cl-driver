@@ -70,6 +70,12 @@
 (defun last-error (db)
   (run-command db "getLastError"))
 
+(defun check-last-error (db)
+  (let ((err (gethash "err" (last-error db))))
+    (when err
+      (error err))
+    (values)))
+
 (defun cursor-info (db)
   (run-command db "cursorInfo"))
 
