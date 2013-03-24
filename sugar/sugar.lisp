@@ -1,11 +1,19 @@
-;;;; son-sugar.lisp
+;;;; sugar.lisp
 ;;;;
 ;;;; This file is part of the MONGO-CL-DRIVER library, released under Lisp-LGPL.
 ;;;; See file COPYING for details.
 ;;;;
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
-(in-package #:mongo-cl-driver.son-sugar)
+(defpackage #:mongo-cl-driver.sugar
+  (:nicknames #:mongo.sugar)
+  (:use #:cl #:iter)
+  (:export #:son
+           #:use-son-printer
+           #:with-son-printer
+           #:print-son))
+
+(in-package #:mongo-cl-driver.sugar)
 
 (defun son (&rest args)
   (when (oddp (length args))

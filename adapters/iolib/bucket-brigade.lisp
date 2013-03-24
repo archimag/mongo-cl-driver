@@ -5,7 +5,7 @@
 ;;;;
 ;;;; Author: Moskvitin Andrey <archimag@gmail.com>
 
-(in-package #:mongo-cl-driver.wire)
+(in-package #:mongo-cl-driver.iolib)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; bucket pool
@@ -161,3 +161,7 @@
                             index)
                       pos)
                 (elt sequence j)))))
+
+(defmethod encode-protocol-message (message (target (eql :brigade)))
+  (encode-protocol-message message
+                           (make-instance 'brigade)))

@@ -1,0 +1,2 @@
+The mongo-cl-driver contains tools for interacting with MongoDB
+database from Common Lisp.

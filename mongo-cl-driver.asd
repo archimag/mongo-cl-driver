@@ -8,31 +8,38 @@
 (defsystem #:mongo-cl-driver
     :depends-on (#:iterate #:closer-mop #:local-time
                  #:babel #:ieee-floats #:ironclad
-                 #:bordeaux-threads #:iolib.sockets)
-    :pathname "src/"
+                 #:bordeaux-threads
+                 #:cl-async-future)
     :serial t
     :components
     ((:module "bson"
-              :pathname "bson/"
               :serial t
               :components ((:file "package")
                            (:file "types")
                            (:file "encode")
                            (:file "decode")))
      (:module "wire"
-              :pathname "wire/"
               :serial t
               :components ((:file "package")
-                           (:file "bucket-brigade")
                            (:file "meta-protocol")
-                           (:file "protocol")
-                           (:file "connection"))
+                           (:file "protocol"))
               :depends-on ("bson"))
-     (:file "packages"  :depends-on ("wire"))
-     (:file "database" :depends-on ("packages"))
-     (:file "cursor" :depends-on ("packages"))
-     (:file "collection" :depends-on ("cursor"))
-     (:file "son-sugar" :depends-on ("packages"))))
+     (:module "adapters"
+              :components ((:file "adapters")))
+     (:module "sugar"
+              :components ((:file "sugar")))
+     (:module "driver"
+              :serial t
+              :pathname "driver"
+              :components ((:file "packages")
+                           (:file "utils")
+                           (:file "conditions")
+                           (:file "client")
+                           (:file "database")
+                           (:file "collection")
+                           (:file "cursor")
+                           (:file "constants")
+                           ))))
 
 (defsystem #:mongo-cl-driver-test
   :depends-on (#:mongo-cl-driver #:lift)

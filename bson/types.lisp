@@ -41,9 +41,17 @@
     (t (generate-id (slot-value id 'raw)))))
 
 (defun generate-id (raw)
-  (let ((time (iolib.syscalls:time))
-        (hostname (ironclad:digest-sequence :md5 (babel:string-to-octets (iolib.syscalls:gethostname) :encoding :utf-8)))
-        (pid (iolib.syscalls:getpid))
+  (let ((time (local-time:timestamp-to-unix (local-time:now)))
+        (hostname (ironclad:digest-sequence
+                   :md5
+                   (babel:string-to-octets (machine-instance) :encoding :utf-8)))
+        (pid #+clisp (system::process-id)
+             #+(and lispworks unix) (system::getpid)
+             #+(and sbcl unix) (sb-unix:unix-getpid)
+             #+(and cmu unix) (unix:unix-getpid)
+             #+openmcl (ccl::getpid)
+             #-(or clisp (and lispworks unix) (and sbcl unix) (and cmu unix) (and openmcl unix) openmcl)
+             (error "Impossible to determine the PID"))
         (inc (bordeaux-threads:with-recursive-lock-held (*object-id-inc-lock*)
                (setf *object-id-inc*
                      (rem (1+ *object-id-inc*)

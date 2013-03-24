@@ -216,12 +216,33 @@
 (define-reply-flag-predicate query-failure-p 1)
 (define-reply-flag-predicate await-capable-p 3)
 
+(defun check-reply-impl (reply error-handler)
+  (cond
+    ((cursor-not-found-p reply)
+     (funcall error-handler
+              "Cursor '~A' not found"
+              (op-reply-cursor-id reply))
+     nil)
+    ((query-failure-p reply)
+     (funcall error-handler
+              (gethash "$err" (car (op-reply-documents reply))))
+     nil)
+    ((gethash "errmsg" (first (op-reply-documents reply)))
+     (funcall error-handler
+              (gethash "errmsg" (first (op-reply-documents reply))))
+     nil)
+    (t t)))
+
 (defun check-reply (reply)
-  (when (cursor-not-found-p reply)
-    (error "Cursor '~A' not found" (op-reply-cursor-id reply)))
-  (when (query-failure-p reply)
-    (error (gethash "$err" (car (op-reply-documents reply)))))
+  (check-reply-impl reply #'error)
   reply)
+
+(defun check-reply-async (reply callback)
+  (labels ((check-reply-callback (&rest args)
+             (funcall callback
+                      (apply #'format args))))
+    (when (check-reply-impl reply #'check-reply-callback)
+      (funcall callback nil reply))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; encode protocol message
@@ -241,10 +262,6 @@
   (coerce  (encode-protocol-message message :vector)
            'list))
 
-(defmethod encode-protocol-message (message (target (eql :brigade)))
-  (encode-protocol-message message
-                           (make-instance 'brigade)))
-
 (defmethod encode-protocol-message :around (message target)
   (let ((*encoded-bytes-count* 0))
     (call-next-method)))
@@ -261,7 +278,8 @@
                                                                        message
                                                                        (slot-definition-name slot)))
                       (for encoder = (message-effective-slot-encoder slot))
-                      (funcall encoder value target))))
+                      (when value
+                        (funcall encoder value target)))))
         (arr (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0)))
     (encode-int32 size arr)
     (bson-target-replace target arr 0)
