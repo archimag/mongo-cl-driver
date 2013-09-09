@@ -49,10 +49,10 @@
                             :key #'slot-definition-name))
          (bson-type (message-slot-definition-bson-type direct-slot))
          (list-p (message-slot-definition-list-p direct-slot))
-         (encoder (or (find-symbol (format nil "ENCODE-~A" bson-type)
+         (encoder (or (find-symbol (format nil "ENCODE-~A" (string bson-type))
                                    '#:mongo-cl-driver.bson)
                       (error "Can not find a encoder for ~A type" bson-type)))
-         (decoder (or (find-symbol (format nil "DECODE-~A" bson-type)
+         (decoder (or (find-symbol (format nil "DECODE-~A" (string bson-type))
                                    '#:mongo-cl-driver.bson)
                       (error "Can not find a decoder for ~A type" bson-type))))
 
