@@ -72,7 +72,8 @@
            #:delete-op
            #:$count
            #:$distinct
-           
+           #:aggregate
+
            ;; cursor
            #:cursor
            #:close-cursor
