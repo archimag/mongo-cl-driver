@@ -124,9 +124,15 @@
     (maybe-finished
      (alet ((distinct (run-command (collection-database collection) cmd)))
        (gethash "values" distinct)))))
-    
-    
-  
+
+(defun aggregate (collection &rest pipeline)
+  (let ((cmd (son "aggregate" (collection-name collection)
+                  "pipeline" pipeline)))
+    (maybe-finished
+     (alet ((reply (run-command (collection-database collection) cmd)))
+       (gethash "result" reply)))))
+
+
 ;;;; TODO
 
 ;; options
@@ -135,4 +141,3 @@
 
 ;; mapReduce
 ;; group
-;; aggregate
