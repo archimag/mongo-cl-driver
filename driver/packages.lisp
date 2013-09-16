@@ -81,4 +81,12 @@
            #:iterate-cursor
            #:docursor
            #:with-cursor
+
+           ;; indexes
+           #:create-index
+           #:ensure-index
+           #:drop-indexes
+           #:reindex
+           #:index-information
+           #:indexes
            ))
