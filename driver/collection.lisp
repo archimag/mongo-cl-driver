@@ -10,6 +10,7 @@
 (defclass collection ()
   ((database :initarg :database :reader collection-database)
    (name :initarg :name :reader collection-name)
+   (indexes :initform nil :accessor collection-indexes)
    (fullname :reader fullname)))
 
 (defun collection (database name)

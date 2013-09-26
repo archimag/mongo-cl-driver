@@ -21,13 +21,17 @@
     (setf (gethash "key" index) keys
           (gethash "ns" index) (fullname collection)
           (gethash "name" index) (gethash "name" index name))
+    (pushnew name (collection-indexes collection) :test #'equal)
     (insert-op index-collection index)))
 
 (defun ensure-index (collection keys &optional (options (son)))
-  ;; Should be cached
-  (create-index collection keys options))
+  (unless (find (make-name keys)
+                (collection-indexes collection)
+                :test #'equal)
+    (create-index collection keys options)))
 
 (defun drop-indexes (collection &optional (name "*"))
+  (setf (collection-indexes collection) nil)
   (let ((cmd (son "dropIndexes" (collection-name collection)
                   "index" name)))
     (maybe-finished
