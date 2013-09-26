@@ -46,7 +46,7 @@
                    :md5
                    (babel:string-to-octets (machine-instance) :encoding :utf-8)))
         (pid #+clisp (system::process-id)
-             #+(and lispworks unix) (system::getpid)
+             #+(and lispworks (or unix windows)) (system::getpid)
              #+(and sbcl unix) (sb-unix:unix-getpid)
              #+(and cmu unix) (unix:unix-getpid)
              #+openmcl (ccl::getpid)
