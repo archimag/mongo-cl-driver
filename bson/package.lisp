@@ -16,6 +16,7 @@
            #:ub8-vector
            
            #:object-id
+           #:format-object-id
            #:+min-key+
            #:+max-key+
            #:binary-data

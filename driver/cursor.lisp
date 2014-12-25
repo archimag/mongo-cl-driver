@@ -7,6 +7,8 @@
 
 (in-package #:mongo-cl-driver)
 
+(defparameter *cursor-batch-size* 0)
+
 (defclass cursor ()
   ((id
     :initarg :id
@@ -27,12 +29,13 @@
   (print-unreadable-object (cursor stream :type t :identity t)
     (princ (cursor-id cursor) stream)))
 
-(defun find-cursor (collection &optional query fields)
-  (maybe-finished
+(defun find-cursor (collection &key query fields)
+  (try-unpromisify
    (alet ((reply (send-message-and-read-reply
                   (mongo-client collection)
                   (make-instance 'op-query
                                  :full-collection-name (fullname collection)
+                                 :number-to-return *cursor-batch-size*
                                  :query query
                                  :return-field-selector fields))))
      (make-instance 'cursor
@@ -42,7 +45,7 @@
 
                          
 (defun close-cursor (cursor)
-  (maybe-finished
+  (try-unpromisify
    (alet ((reply (send-message (mongo-client cursor)
                                (make-instance 'op-kill-cursors
                                               :cursor-ids (list (cursor-id cursor))))))
@@ -51,65 +54,66 @@
      cursor)))
 
 (defun refresh-cursor (cursor)
-  (maybe-finished
+  (try-unpromisify
    (alet ((reply (send-message-and-read-reply
                   (mongo-client cursor)
                   (make-instance 'op-getmore
                                  :cursor-id (cursor-id cursor)
                                  :full-collection-name (fullname (cursor-collection cursor))
-                                 :number-to-return 20))))
+                                 :number-to-return *cursor-batch-size*))))
      (setf (slot-value cursor 'documents)
            (op-reply-documents reply))
      cursor)))
 
 
 (defun iterate-cursor (cursor handler)
-  (print "iterate")
-  (let ((future (make-future)))
-    (labels ((iterate-cursor-impl (&optional x)
-               (declare (ignore x))
-               (cond
-                 ((cursor-documents cursor)
-                  (iter (for item in (cursor-documents cursor))
-                        (funcall handler item))
-                  (handler-case
-                      (let ((refresh-future (refresh-cursor cursor)))
-                        (attach refresh-future
-                                #'iterate-cursor-impl)
-                        (attach-errback refresh-future
-                                        (lambda (err)
-                                          (cond
-                                            ((typep err 'cursor-not-found)
-                                             (finish future))
-                                            (t
-                                             (signal-error future err))))))
-                    (cursor-not-found ()
-                      (finish future))))
-                 (t
-                  (finish future)))))
-      (iterate-cursor-impl nil)
-      (maybe-finished
-       future))))
+  (try-unpromisify
+   (with-promise (resolve reject)
+     (labels ((iterate-cursor-impl (&optional x)
+                (declare (ignore x))
+                (cond
+                  ((cursor-documents cursor)
+                   (iter (for item in (cursor-documents cursor))
+                         (funcall handler item))
+                   (catcher
+                    (attach (refresh-cursor cursor)
+                            #'iterate-cursor-impl)
+                    (cursor-not-found (e)
+                      (declare (ignore e))
+                      (resolve))
+                    (t (e)
+                       (reject e))))
+                  (t
+                   (resolve)))))
+       (iterate-cursor-impl nil)))))
 
 (defmacro docursor ((var cursor &key (close-after t)) &body body)
   (if close-after
       (let ((cur (gensym)))
-        `(let ((future (make-future)))
+        `(let ((promise (make-promise)))
            (alet ((,cur ,cursor))
              (wait-for (iterate-cursor ,cur (lambda (,var) ,@body))
                (wait-for (close-cursor ,cur)
-                 (finish future)))
-             future)))
+                 (finish promise)))
+             promise)))
       `(iterate-cursor ,cursor
                        (lambda (,var) ,@body))))
 
-
-(defmacro with-cursor ((name collection &optional query fields) &body body)
-  `(let ((,name (find-cursor ,collection ,query ,fields)))
+(defmacro with-cursor-sync ((name collection &key query fields) &body body)
+  `(let ((,name (find-cursor ,collection :query ,query :fields ,fields)))
      (unwind-protect
           (progn ,@body)
        (close-cursor ,name))))
 
-;;; TODO
+(defmacro with-cursor ((name collection &key query fields) &body body)
+  `(let (,name)
+     (chain (find-cursor ,collection :query ,query :fields ,fields)
+       (:attach (x)
+         (setf ,name x)
+         x)
+       (:attach (,name)
+         ,@body)
+       (:finally ()
+         (when ,name
+           (close-cursor ,name))))))
 
-;; cursorInfo

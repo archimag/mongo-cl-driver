@@ -8,14 +8,14 @@
 (defpackage #:mongo-cl-driver.sugar
   (:nicknames #:mongo.sugar)
   (:use #:cl #:iter)
-  (:export #:son
+  (:export #:$ #:$.get #:$.set #:$.id
            #:use-son-printer
            #:with-son-printer
            #:print-son))
 
 (in-package #:mongo-cl-driver.sugar)
 
-(defun son (&rest args)
+(defun $ (&rest args)
   (when (oddp (length args))
     (error "odd number of &ARGS arguments"))
   (let ((son (make-hash-table :test 'equal)))
@@ -24,6 +24,17 @@
           (setf (gethash key son)
                 (second item)))
     son))
+
+(defun $.get (object key)
+  (gethash key object))
+
+(defun $.set (object key value)
+  (setf (gethash key object)
+        value))
+
+(defun $.id (object)
+  (gethash "_id" object))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; pprint
@@ -48,3 +59,4 @@
   (with-son-printer
     (print obj stream)))
     
+

@@ -9,13 +9,13 @@
   (:nicknames #:mongo )
   (:use #:cl
         #:iter #:alexandria
-        #:cl-async-future
+        #:blackbird
         #:mongo-cl-driver.wire
         #:mongo-cl-driver.adapters
         #:mongo-cl-driver.sugar)
   (:import-from #:mongo-cl-driver.adapters #:mongo-client-close)
-  (:shadow #:defconstant)
-  (:shadowing-import-from #:cl-async-future #:finish)
+  (:shadow #:defconstant #:find #:remove)
+  (:shadowing-import-from #:iterate #:finally)
   (:export #:mongo-client
            #:create-mongo-client
            #:mongo-client-close
@@ -65,19 +65,21 @@
            ;; collection
            #:collection
            #:find-one
-           #:find-list
-           #:insert-op
-           #:update-op
-           #:save-op
-           #:delete-op
+           #:find
+           #:insert
+           #:update
+           #:save
+           #:remove
            #:$count
            #:$distinct
            
            ;; cursor
+           #:*cursor-batch-size*
            #:cursor
            #:close-cursor
            #:find-cursor
            #:iterate-cursor
            #:docursor
            #:with-cursor
+           #:with-cursor-sync
            ))

@@ -7,7 +7,7 @@
 
 (defpackage #:mongo-cl-driver.adapters.usocket
   (:nicknames #:mongo.usocket)
-  (:use #:cl #:mongo-cl-driver.adapters #:mongo-cl-driver.wire #:cl-async-future)
+  (:use #:cl #:mongo-cl-driver.adapters #:mongo-cl-driver.wire)
   (:import-from #:mongo-cl-driver.bson #:ub8)
   (:export #:mongo-client))
 

@@ -33,10 +33,13 @@
     (raw (assert (= (length raw) 12))
          (replace (slot-value id 'raw)
                   raw))
-    
-    (text (assert (= (length text) 12))
-          (replace (slot-value id 'raw)
-                   (map 'vector #'char-code text)))
+
+    (text (assert (= (length text) 24))
+          (with-input-from-string (in text)
+            (iter (repeat 12)
+                  (for i from 0)
+                  (setf (aref (slot-value id 'raw) i)
+                        (parse-integer (format nil "~C~C" (read-char in) (read-char in)) :radix 16)))))
     
     (t (generate-id (slot-value id 'raw)))))
 
@@ -77,10 +80,14 @@
           (aref raw 10) (ldb (byte 8 8) inc)
           (aref raw 11) (ldb (byte 8 16) inc))))
 
-(defmethod print-object ((id object-id) stream)
-  (print-unreadable-object (id stream :type t :identity nil)
+(defun format-object-id (id)
+  (with-output-to-string (stream)
     (iter (for ch in-vector (slot-value id 'raw))
           (format stream "~2,'0X" ch))))
+
+(defmethod print-object ((id object-id) stream)
+  (print-unreadable-object (id stream :type t :identity nil)
+    (format stream (format-object-id id))))
 
 ;;;; Binary data
 

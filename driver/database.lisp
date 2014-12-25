@@ -24,13 +24,13 @@
 ;;;; commands
 
 (defun run-command (db cmd)
-  (maybe-finished
+  (try-unpromisify
    (alet ((reply (send-message-and-read-reply
                   (mongo-client db)
                   (make-instance 'op-query
                                  :number-to-return 1
                                  :full-collection-name (format nil "~A.$cmd" (database-name db))
-                                 :query (if (stringp cmd) (son cmd t) cmd)))))
+                                 :query (if (stringp cmd) ($ cmd t) cmd)))))
      (first (op-reply-documents reply)))))
 
 ;;;; errors
@@ -57,13 +57,13 @@
                      nonce
                      username
                      (md5 (format nil "~A:mongo:~A" username password)))))
-    (maybe-finished
+    (try-unpromisify
      (alet ((nonce-reply (run-command database "getnonce")))
        (run-command database
-                    (son "authenticate" 1
-                         "user" username
-                         "nonce" (gethash "nonce" nonce-reply)
-                         "key" (nonce-key (gethash "nonce" nonce-reply) username password)))))))
+                    ($ "authenticate" 1
+                       "user" username
+                       "nonce" (gethash "nonce" nonce-reply)
+                       "key" (nonce-key (gethash "nonce" nonce-reply) username password)))))))
 
 (defun logout (database)
   (run-command database "logout"))
@@ -72,30 +72,30 @@
 
 (defun collection-names (database)
   "Get a list of all the collection in this DATABASE."
-  (maybe-finished
+  (try-unpromisify
    (alet ((reply (send-message-and-read-reply
                   (mongo-client database)
                   (make-instance 'op-query
                                  :full-collection-name (format nil "~A.system.namespaces" (database-name database))
-                                 :query (son)))))
+                                 :query ($)))))
      (iter (for item in (op-reply-documents reply))
            (let* ((fullname (gethash "name" item))
                   (name (second (multiple-value-list (starts-with-subseq (format nil "~A." (database-name database))
                                                                          fullname
                                                                          :return-suffix t)))))
-             (when (and name (not (find #\$ name)))
+             (when (and name (not (cl:find #\$ name)))
                (collect name)))))))
 
 (defun create-collection (db name &key size capped max)
   (check-type name string)
   "Create new Collection in DATABASE."
-  (let ((cmd (son "create" name)))
+  (let ((cmd ($ "create" name)))
     (iter (for (key . value) in `(("size" . ,size) ("cappend" . ,capped) ("max" . ,max)))
           (setf (gethash key cmd) value))
     (run-command db cmd)))
 
 (defun drop-collection (db name)
-  (run-command db (son "drop" name)))
+  (run-command db ($ "drop" name)))
 
 ;; (defun rename-collection (db name &key drop-target)
 ;;   )
@@ -103,12 +103,12 @@
 ;;;; eval
 
 (defun eval-js (db code &key args nolock)
-  (let ((cmd (son "$eval" (make-instance 'mongo.bson:javascript :code code))))
+  (let ((cmd ($ "$eval" (make-instance 'mongo.bson:javascript :code code))))
     (when args
       (setf (gethash "args" cmd) args))
     (when nolock
       (setf (gethash "nolock" cmd) t))
-    (maybe-finished
+    (try-unpromisify
      (alet ((retval (run-command db cmd)))
        (gethash "retval" retval)))))
 

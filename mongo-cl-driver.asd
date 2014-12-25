@@ -9,7 +9,7 @@
     :depends-on (#:iterate #:closer-mop #:local-time
                  #:babel #:ieee-floats #:ironclad
                  #:bordeaux-threads
-                 #:cl-async-future)
+                 #:blackbird)
     :serial t
     :components
     ((:module "bson"
