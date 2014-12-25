@@ -72,7 +72,8 @@
            #:remove
            #:$count
            #:$distinct
-           
+           #:aggregate
+
            ;; cursor
            #:*cursor-batch-size*
            #:cursor
@@ -82,4 +83,12 @@
            #:docursor
            #:with-cursor
            #:with-cursor-sync
+
+           ;; indexes
+           #:create-index
+           #:ensure-index
+           #:drop-indexes
+           #:reindex
+           #:index-information
+           #:indexes
            ))

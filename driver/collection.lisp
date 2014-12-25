@@ -10,6 +10,7 @@
 (defclass collection ()
   ((database :initarg :database :reader collection-database)
    (name :initarg :name :reader collection-name)
+   (indexes :initform nil :accessor collection-indexes)
    (fullname :reader fullname)))
 
 (defun collection (database name)
@@ -121,9 +122,15 @@
     (try-unpromisify
      (alet ((distinct (run-command (collection-database collection) cmd)))
        (gethash "values" distinct)))))
-    
-    
-  
+
+(defun aggregate (collection &rest pipeline)
+  (let ((cmd ($ "aggregate" (collection-name collection)
+                "pipeline" pipeline)))
+    (try-unpromisify
+     (alet ((reply (run-command (collection-database collection) cmd)))
+           (gethash "result" reply)))))
+
+
 ;;;; TODO
 
 ;; options
@@ -132,4 +139,3 @@
 
 ;; mapReduce
 ;; group
-;; aggregate

@@ -49,11 +49,11 @@
                    :md5
                    (babel:string-to-octets (machine-instance) :encoding :utf-8)))
         (pid #+clisp (system::process-id)
-             #+(and lispworks unix) (system::getpid)
+             #+(and lispworks (or unix windows)) (system::getpid)
              #+(and sbcl unix) (sb-unix:unix-getpid)
              #+(and cmu unix) (unix:unix-getpid)
              #+openmcl (ccl::getpid)
-             #-(or clisp (and lispworks unix) (and sbcl unix) (and cmu unix) (and openmcl unix) openmcl)
+             #-(or clisp (and lispworks (or unix windows)) (and sbcl unix) (and cmu unix) (and openmcl unix) openmcl)
              (error "Impossible to determine the PID"))
         (inc (bordeaux-threads:with-recursive-lock-held (*object-id-inc-lock*)
                (setf *object-id-inc*
