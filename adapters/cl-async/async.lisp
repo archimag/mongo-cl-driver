@@ -43,6 +43,12 @@
     (unless (socket-closed socket)
       (close-socket socket))))
 
+(defun encode-message (message)
+  ;; temporary fix
+  (let* ((vector (encode-protocol-message message :vector))
+         (sv (make-array (length vector) :element-type '(unsigned-byte 8) :initial-contents vector)))
+    sv))
+
 (defmethod send-message ((client mongo-client) message &key write-concern)
   (with-promise (resolve reject)
     (let ((crazy-p (and write-concern (eql (mongo-cl-driver:write-concern-w write-concern) :errors-ignored))))
@@ -52,7 +58,7 @@
                  (declare (ignore socket))
                  (resolve)))
         (write-socket-data (mongo-client-socket client)
-                           (encode-protocol-message message :vector)
+                           (encode-message message)
                            :write-cb (if (not crazy-p) #'send-message-callback)
                            :event-cb (if (not crazy-p) #'error-send-message-callback)))
         (when crazy-p
@@ -84,6 +90,6 @@
                              (resolve reply))))))))
         #|--------------------------------------------------------------------|#
         (write-socket-data (mongo-client-socket mongo-client)
-                           (encode-protocol-message message :vector)
+                           (encode-message message)
                            :event-cb #'error-read-reply-callback
                            :read-cb #'read-reply-callback)))))

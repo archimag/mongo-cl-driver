@@ -8,9 +8,19 @@
 (in-package #:mongo-cl-driver)
 
 (defun try-unpromisify (promise)
-  (if (and (promisep promise) (promise-finished-p promise))
-      (values-list (blackbird-base::promise-values promise))
-      promise))
+  (cond
+    #|------------------------------------------------------------------------|#
+    ((not (promisep promise))
+     promise)
+    #|------------------------------------------------------------------------|#
+    ((promise-finished-p promise)
+     (values-list (blackbird-base::promise-values promise)))
+    #|------------------------------------------------------------------------|#
+    ((blackbird-base::promise-forward-to promise)
+     (try-unpromisify (blackbird-base::promise-forward-to promise)))
+    #|------------------------------------------------------------------------|#
+    (t
+     promise)))
   
 (defun check-collection-name (name)
     (check-type name string)

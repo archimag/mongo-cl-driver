@@ -119,6 +119,9 @@
 (defmethod shared-initialize :after ((query op-query) slot-names &key
                                      tailable-cursor slave-ok no-cursor-timeout
                                      await-data exhaust partial)
+  (unless (slot-value query 'query)
+    (setf (slot-value query 'query)
+          (make-hash-table :test 'equal)))
   (unless (slot-value query 'return-field-selector)
     (setf (slot-value query 'return-field-selector)
           (make-hash-table :test 'equal)))
