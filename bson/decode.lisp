@@ -47,9 +47,17 @@
         (1- (- (logandc2 #xFFFFFFFFFFFFFFFF ui64)))
         ui64)))
 
+(defun decode-uint64 (source)
+  "Decode 64-bit unsigned integer from SOURCE"
+  (let ((ui64 0))
+    (iter (for i from 0 below 64 by 8)
+          (setf (ldb (byte 8 i) ui64)
+                (decode-byte source)))
+    ui64))
+
 (defun decode-double (source)
   "Decode 64-bit IEEE 754 floating point from SOURCE"
-  (ieee-floats:decode-float64 (decode-int64 source)))
+  (ieee-floats:decode-float64 (decode-uint64 source)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Non-terminals
